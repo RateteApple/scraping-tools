@@ -1,0 +1,7 @@
+[project]
+name = "scraping_tools"
+version = "0.2.0"
+description = "スクレイピング処理を行うスクリプト群"
+dynamic = ["dependencies"]
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}

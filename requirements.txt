@@ -1,0 +1,12 @@
+# Scraping
+requests>=2.31
+selenium>=4.12
+feedparser>=6.0
+xmltodict>=0.13
+beautifulsoup4>=4.12
+
+# YoutubeAPI
+google-api-python-client>=2.98
+
+# DEBUG
+my-utilities @ git+https://github.com/RateteApple/my-utilities@f342752e8b36bc2111e946704f90b71f136ba8bd
