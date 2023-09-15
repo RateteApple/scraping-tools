@@ -113,7 +113,10 @@ class YouTube:
         content["id"] = item["id"]
         content["channel_id"] = item["snippet"]["channelId"]
         content["channel_title"] = item["snippet"]["channelTitle"]
-        content["tags"] = item["snippet"]["tags"]
+        if "tags" in item["snippet"]:
+            content["tags"] = item["snippet"]["tags"]
+        else:
+            content["tags"] = []
         content["title"] = item["snippet"]["title"]
         content["link"] = "https://www.youtube.com/watch?v=" + item["id"]
         content["description"] = item["snippet"]["description"]
