@@ -9,4 +9,4 @@ beautifulsoup4>=4.12
 google-api-python-client>=2.98
 
 # DEBUG
-my-utilities @ git+https://github.com/RateteApple/my-utilities@a0ec2e3c8b1a0a586ceac4ab7e5e10d443b50e10
+my-utilities @ git+https://github.com/RateteApple/my-utilities.git
