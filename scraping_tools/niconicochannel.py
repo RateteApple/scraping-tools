@@ -76,10 +76,9 @@ class NicoNicoChannel:
             return self.driver
 
     # トップページの生放送を取得するメソッド
-    def top_live(self, channel_id, max_page: int = 1) -> list[dict]:
+    def top_live(self, channel_id, page: int = 1, limit: int = 20) -> list[dict]:
         """ニコニコチャンネルの生放送ページから一覧をスクレイピングする"""
         lives = []
-        item: WebElement
 
         # チャンネルIDが間違った形式の場合はエラー
         if not re.match(pattern=self.channel_id_pattern, string=channel_id):
@@ -89,41 +88,89 @@ class NicoNicoChannel:
         self.driver.get(f"https://ch.nicovideo.jp/{channel_id}/live")
 
         # 引数で指定されたページ数分ループ
-        counter = 0
+        page_count = 1
         while True:
-            counter += 1
-            # 放送中、放送予定のセクションは1ページ目のみ取得
-            if counter == 1:
-                # 放送中
-                now_section: WebElement = self.wait.until(EC.presence_of_element_located((By.XPATH, '//section[@class="sub now"]')))
-                items: list = now_section.find_elements(By.XPATH, './div[@id="live_now"]/div[@id="live_now_cnt"]/ul/li[@class="item"]')
-                for item in items:
-                    now_live = {}
-                    now_live["channel_id"] = channel_id
-                    now_live["status"] = "now"
-                    now_live["title"] = item.find_element(By.XPATH, './/p[@class="title"]').text
-                    now_live["link"] = item.find_element(By.XPATH, './/p[@class="title"]/a').get_attribute("href")
-                    now_live["id"] = now_live["link"].split("/")[-1]
-                    now_live["thumbnail_link"] = item.find_element(By.XPATH, ".//img").get_attribute("src")
-                    lives.append(now_live)
-                # 放送予定
-                future_section: WebElement = self.wait.until(EC.presence_of_element_located((By.XPATH, '//section[@class="sub future"]')))
-                items: list = future_section.find_elements(By.XPATH, './/li[@class="item"]')
-                for item in items:
-                    future_live = {}
-                    future_live["channel_id"] = channel_id
-                    future_live["status"] = "future"
-                    future_live["title"] = item.find_element(By.XPATH, './/h2[@class="title"]').text
-                    future_live["link"] = item.find_element(By.XPATH, ".//h2[@class='title']/a").get_attribute("href")
-                    future_live["id"] = future_live["link"].split("/")[-1]
-                    future_live["thumbnail_link"] = item.find_element(By.XPATH, ".//img").get_attribute("src")
-                    scheduled_start_at: str = item.find_element(By.XPATH, './/p[@class="date"]/strong').text
-                    scheduled_start_at: str = re.sub(r"\s*\([^)]*\)", "", scheduled_start_at)  # 曜日部分を削除
-                    scheduled_start_at: datetime = datetime.strptime(scheduled_start_at, "%m月%d日 %H時%M分")  # datetime型に変換
-                    scheduled_start_at: datetime = set_year(scheduled_start_at)  # 年を設定
-                    future_live["scheduled_start_at"] = scheduled_start_at.isoformat()
-                    lives.append(future_live)
-            # 過去放送
+            # 1ページ目は放送中、放送予定、過去放送の全てを取得
+            if page_count == 1:
+                lives.extend(self._top_live_page(now=True, future=True, past=True))
+            # 2ページ目以降は過去放送のみを取得
+            else:
+                lives.extend(self._top_live_page(now=False, future=False, past=True))
+
+            # ページ数をカウントアップ
+            page_count += 1
+
+            # 取得したページ数が指定されたページ数に達したら終了
+            if page_count > page:
+                break
+            # 取得したアイテム数が指定されたアイテム数に達したら終了
+            if len(lives) >= limit:
+                lives = lives[:limit]
+                break
+
+            # 次のページがあるかどうかを確認
+            for _ in range(30):
+                try:
+                    next_buttons: list = self.driver.find_elements(By.XPATH, '//li[@class="next"]/a')  # 次へのボタン
+                except StaleElementReferenceException:
+                    next_disableds: list = self.driver.find_elements(By.XPATH, '//li[@class="next disabled"]')  # 次へのボタンが無効化された要素
+                if next_buttons or next_disableds:  # どちらかが取得できればループを抜ける
+                    break
+            else:  # 30回ループしても取得できなければエラー
+                raise Exception("ページ遷移処理に失敗")
+
+            # 次のページに遷移
+            if next_buttons:
+                next_buttons[0].click()
+
+        return lives
+
+    def _top_live_page(self, now=True, future=True, past=True) -> list[dict]:
+        lives = []
+        item: WebElement
+
+        icon_link: WebElement = get_matching_element(
+            base_element=self.driver, tag="span", attribute="class", pattern=re.compile(r"^.*thumb_wrapper_ch.*$")
+        )
+        channel_title: str = icon_link.find_element(By.XPATH, "./a").get_attribute("title")
+        channel_id: str = icon_link.find_element(By.XPATH, "./a").get_attribute("href").split("/")[-1]
+
+        # 放送中
+        if now:
+            now_section: WebElement = self.wait.until(EC.presence_of_element_located((By.XPATH, '//section[@class="sub now"]')))
+            items: list = now_section.find_elements(By.XPATH, './div[@id="live_now"]/div[@id="live_now_cnt"]/ul/li[@class="item"]')
+            for item in items:
+                now_live = {}
+                now_live["channel_id"] = channel_id
+                now_live["channel_title"] = channel_title
+                now_live["status"] = "now"
+                now_live["title"] = item.find_element(By.XPATH, './/p[@class="title"]').text
+                now_live["link"] = item.find_element(By.XPATH, './/p[@class="title"]/a').get_attribute("href")
+                now_live["id"] = now_live["link"].split("/")[-1]
+                now_live["thumbnail_link"] = item.find_element(By.XPATH, ".//img").get_attribute("src")
+                lives.append(now_live)
+
+        # 放送予定
+        if future:
+            future_section: WebElement = self.wait.until(EC.presence_of_element_located((By.XPATH, '//section[@class="sub future"]')))
+            items: list = future_section.find_elements(By.XPATH, './/li[@class="item"]')
+            for item in items:
+                future_live = {}
+                future_live["channel_id"] = channel_id
+                future_live["status"] = "future"
+                future_live["title"] = item.find_element(By.XPATH, './/h2[@class="title"]').text
+                future_live["link"] = item.find_element(By.XPATH, ".//h2[@class='title']/a").get_attribute("href")
+                future_live["id"] = future_live["link"].split("/")[-1]
+                future_live["thumbnail_link"] = item.find_element(By.XPATH, ".//img").get_attribute("src")
+                scheduled_start_at: str = item.find_element(By.XPATH, './/p[@class="date"]/strong').text
+                scheduled_start_at: str = re.sub(r"\s*\([^)]*\)", "", scheduled_start_at)  # 曜日部分を削除
+                scheduled_start_at: datetime = datetime.strptime(scheduled_start_at, "%m月%d日 %H時%M分")  # datetime型に変換
+                scheduled_start_at: datetime = set_year(scheduled_start_at)  # 年を設定
+                future_live["scheduled_start_at"] = scheduled_start_at.isoformat()
+                lives.append(future_live)
+
+        # 過去放送
+        if past:
             past_section: WebElement = self.wait.until(EC.presence_of_element_located((By.XPATH, '//section[@class="sub past"]')))
             items: list = past_section.find_elements(By.XPATH, './/li[@class="item"]')
             for item in items:
@@ -140,23 +187,6 @@ class NicoNicoChannel:
                 actual_start_at: datetime = set_year(actual_start_at)  # 年を設定
                 past_live["actual_start_at"] = actual_start_at.isoformat()
                 lives.append(past_live)
-            # 取得したページ数が指定されたページ数に達したら終了
-            if counter >= max_page:
-                break
-
-            # 次のページがあるかどうかを確認
-            for _ in range(30):
-                try:
-                    next_buttons: list = self.driver.find_elements(By.XPATH, '//li[@class="next"]/a')  # 次へのボタン
-                except StaleElementReferenceException:
-                    next_disableds: list = self.driver.find_elements(By.XPATH, '//li[@class="next disabled"]')  # 次へのボタンが無効化された要素
-                if next_buttons or next_disableds:  # どちらかが取得できればループを抜ける
-                    break
-            else:  # 30回ループしても取得できなければエラー
-                raise Exception("ページ遷移処理に失敗")
-            # 次のページに遷移
-            if next_buttons:
-                next_buttons[0].click()
 
         return lives
 
