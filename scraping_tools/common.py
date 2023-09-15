@@ -51,7 +51,7 @@ class Content:
 
         コンテンツの情報を文字列化する
         """
-        return f"Title: {self.title}, URL: {self.url}, Duration: {self.duration}, Thumbnail: {self.thumbnail}, ViewCount: {self.view_count}, PostedAt: {self.posted_at}"
+        return f"Title: {self.title}, URL: {self.url}, PostedAt: {self.posted_at}"
 
 
 # 動画クラス
@@ -95,13 +95,11 @@ class Video(Content):
         self.dislike_count = dislike_count
         self.comment_count = comment_count
         self.tags = tags
-
-    def __str__(self):
         """文字列化関数
 
         動画の情報を文字列化する
         """
-        return f"Title: {self.title}, URL: {self.url}, Duration: {self.duration}, Thumbnail: {self.thumbnail}, ViewCount: {self.view_count}, LikeCount: {self.like_count}, DislikeCount: {self.dislike_count}, CommentCount: {self.comment_count}, PostedAt: {self.posted_at}"
+        super().__str__()
 
 
 # 生放送クラス
@@ -148,6 +146,34 @@ class Live(Content):
         self.scduled_end_at = scduled_end_at
         self.actual_end_at = actual_end_at
         self.current_view_count = current_view_count
+
+
+# ニュースクラス
+class News(Content):
+    """ニュースクラス
+
+    ニュースの情報を格納する
+    """
+
+    body: str
+
+    def __init__(
+        self,
+        title: str = None,
+        url: str = None,
+        thumbnail: str = None,
+        posted_at: datetime = None,
+        platform: str = None,
+        poster_name: str = None,
+        poster_id: str = None,
+        body: str = None,
+    ):
+        """初期化関数
+
+        ニュースの情報を初期化する
+        """
+        super().__init__(title, url, thumbnail, posted_at, platform, poster_name, poster_id)
+        self.body = body
 
 
 # 年部分を補完する関数
