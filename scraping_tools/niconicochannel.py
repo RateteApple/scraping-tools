@@ -23,7 +23,7 @@ from my_utilities.debug_decorator import apply_output_debug
 logger = logging.getLogger(__name__)
 
 
-@apply_output_debug(logger, exclude=["_live_page", "_video_page", "_news_page"])
+@apply_output_debug(exclude=("_live_page", "_video_page", "_news_page"))
 class NicoNicoChannel:
     """ニコニコチャンネルのコンテンツを取得するクラス"""
 

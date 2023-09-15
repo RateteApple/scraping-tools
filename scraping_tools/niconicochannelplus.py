@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 # TODO: 日付文字列の変換処理に改善の余地あり
-@apply_output_debug(logger, exclude=["_news_page", "_content_page"])
+@apply_output_debug(exclude=("_news_page", "_content_page"))
 class NicoNicoChannelPlus:
     """ニコニコチャンネルプラスのコンテンツを取得するクラス"""
 

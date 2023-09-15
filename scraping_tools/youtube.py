@@ -12,7 +12,7 @@ from my_utilities.debug_decorator import apply_output_debug
 logger = logging.getLogger(__name__)
 
 
-@apply_output_debug(logger, exclude=["_get_common_part", "_get_live_part"])
+@apply_output_debug(exclude=("_get_common_part", "_get_live_part"))
 class YouTube:
     """YouTubeAPIのヘルパークラス"""
 
