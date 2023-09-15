@@ -191,7 +191,7 @@ class NicoNicoChannel:
         return lives
 
     # トップページの動画を取得するメソッド
-    def top_video(self, channel_id: str, max_page: int = 1) -> list[dict]:
+    def top_video(self, channel_id: str, page: int = 1, limit: int = 20) -> list[dict]:
         """ニコニコチャンネルの動画ページから動画をスクレイピングする"""
         videos = []
         item: WebElement
@@ -203,9 +203,9 @@ class NicoNicoChannel:
         # ページを開く
         self.driver.get(f"https://ch.nicovideo.jp/{channel_id}/video")
 
-        counter = 0
+        page_count = 0
         while True:
-            counter += 1
+            page_count += 1
             # アイテムを取得
             items = self.wait.until(EC.presence_of_all_elements_located((By.XPATH, '//li[@class="item"]')))
             # 動画情報を取得
@@ -226,7 +226,11 @@ class NicoNicoChannel:
                 video["length"]: str = timedelta(minutes=int(minute), seconds=int(second)).total_seconds()
                 videos.append(video)
             # 取得したページ数が指定されたページ数に達したら終了
-            if counter >= max_page:
+            if page_count >= page:
+                break
+            # 取得したアイテム数が指定されたアイテム数に達したら終了
+            if len(videos) >= limit:
+                videos = videos[:limit]
                 break
             # 次のページがあるかどうかを確認
             for _ in range(30):
@@ -245,7 +249,7 @@ class NicoNicoChannel:
         return videos
 
     # トップページのニュースを取得するメソッド
-    def top_news(self, channel_id: str) -> str:
+    def top_news(self, channel_id: str, limit: int = 20) -> str:
         """ニコニコチャンネルのニュースをfeedを使って取得する"""
         newses = []
 
@@ -277,6 +281,9 @@ class NicoNicoChannel:
             published_at: datetime = datetime.strptime(entry["published"], "%a, %d %b %Y %H:%M:%S %z")
             news["published_at"]: str = published_at.isoformat()
             newses.append(news)
+
+        # 指定された数だけニュースを取得
+        newses = newses[:limit]
 
         return newses
 
