@@ -38,7 +38,7 @@ NEWS_ID_PATTERN = "^ar\d+$"
 class Channel(Platform):
     """ニコニコチャンネルのコンテンツを取得するクラス"""
 
-    platform = "niconico"
+    platform = "niconico_channel"
 
     # トップページの全てのコンテンツを取得する
     def get_all(self, limit_live: int = 10, limit_video: int = 20, limit_news: int = 5) -> tuple[list[Live], list[Video], list[Channel.News]]:

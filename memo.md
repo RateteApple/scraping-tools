@@ -28,8 +28,6 @@ Methods
 
 Attributes
 
-* platform
-
 Methods
 
 * get_all

@@ -20,24 +20,17 @@ from my_utilities.debug import execute_time
 
 logger = logging.getLogger(__name__)
 
+root_xpath: str = '//div[@id="root"]'
+header_xpath: str = '//div[@id="root"]/div/div[1]'
+main_xpath: str = '//div[@id="root"]/div/div[2]/div[1]'
+footer_xpath: str = '//div[@id="root"]/div/div[2]/div[2]'
+not_found_xpath: str = '//h5[text()="ページを表示することができませんでした"]'
+not_found_xpath2: str = '//h5[text()="お探しのページは見つかりませんでした"]'
 
-# TODO: 日付文字列の変換処理に改善の余地あり
+
 @execute_time()
 class Channel(ScrapingClass):
     """ニコニコチャンネルプラスのコンテンツを取得するクラス"""
-
-    root_xpath: str = '//div[@id="root"]'
-    header_xpath: str = '//div[@id="root"]/div/div[1]'
-    main_xpath: str = '//div[@id="root"]/div/div[2]/div[1]'
-    footer_xpath: str = '//div[@id="root"]/div/div[2]/div[2]'
-    not_found_xpath: str = '//h5[text()="ページを表示することができませんでした"]'
-    not_found_xpath2: str = '//h5[text()="お探しのページは見つかりませんでした"]'
-
-    # ブラウザはヘッドレスモードがデフォルト
-    is_headless = True
-    # 要素が見つかるまでのデフォルトの待機時間
-    default_wait_time = 5
-    retry_interval: float = 0.3
 
     # コンストラクタ
     def __init__(self):
