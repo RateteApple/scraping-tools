@@ -56,6 +56,7 @@ Attributes
 * poster_name
 * url
 * title
+* thumbnail
 * posted_at
 * updated_at
 * tags

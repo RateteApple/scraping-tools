@@ -91,6 +91,7 @@ class Content(ScrapingClass):
     poster_name: str
     title: str
     url: str
+    thumbnail: str
     posted_at: datetime
     updated_at: datetime
     tags: list[str]
@@ -102,6 +103,7 @@ class Content(ScrapingClass):
         self.poster_name: str = ""
         self.title: str = ""
         self.url: str = ""
+        self.thumbnail: str = ""
         self.posted_at: datetime = None
         self.updated_at: datetime = None
         self.tags: list[str] = []

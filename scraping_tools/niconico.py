@@ -35,13 +35,13 @@ NEWS_ID_PATTERN = "^ar\d+$"
 
 
 @execute_time()
-class Channel(Platform):
+class NicoNicoChannel(Platform):
     """ニコニコチャンネルのコンテンツを取得するクラス"""
 
-    platform = "niconico_channel"
-
     # トップページの全てのコンテンツを取得する
-    def get_all(self, limit_live: int = 10, limit_video: int = 20, limit_news: int = 5) -> tuple[list[Live], list[Video], list[Channel.News]]:
+    def get_all(
+        self, limit_live: int = 10, limit_video: int = 20, limit_news: int = 5
+    ) -> tuple[list[NicoNicoLive], list[NicoNicoVideo], list[NicoNicoChannel.News]]:
         """ニコニコチャンネルに含まれる全てのコンテンツを取得する"""
         lives = self.get_live(limit_live)
         videos = self.get_video(limit_video)
@@ -50,15 +50,15 @@ class Channel(Platform):
         return lives, videos, newses
 
     # トップページの生放送を取得する
-    def get_live(self, limit: int = 10) -> list[Live]:
+    def get_live(self, limit: int = 10) -> list[NicoNicoLive]:
         """ニコニコチャンネルの生放送ページから一覧をスクレイピングする
 
         1ページには大体10個の生放送が含まれている（放送予定、放送中の要素がある場合は増える）
         """
-        self.lives = self.__live_page_loop(limit)
-        return self.lives
+        lives = self.__live_page_loop(limit)
+        return lives
 
-    def __live_page_loop(self, limit: int) -> list[Live]:
+    def __live_page_loop(self, limit: int) -> list[NicoNicoLive]:
         """ニコニコチャンネルの生放送ページから一覧をスクレイピングする"""
         lives = []
 
@@ -90,7 +90,7 @@ class Channel(Platform):
 
         return lives
 
-    def __live_page(self, now=True, future=True, past=True) -> list[Live]:
+    def __live_page(self, now=True, future=True, past=True) -> list[NicoNicoLive]:
         lives = []
 
         # 投稿者の名前とIDを取得
@@ -115,7 +115,7 @@ class Channel(Platform):
 
         return lives
 
-    def __now_section(self, section: WebElement, poster_id: str, poster_name: str) -> list[Live]:
+    def __now_section(self, section: WebElement, poster_id: str, poster_name: str) -> list[NicoNicoLive]:
         lives = []
         item: WebElement
         # アイテム要素を取得
@@ -134,7 +134,7 @@ class Channel(Platform):
             thumbnail = item.find_element(By.XPATH, ".//img").get_attribute("src")
 
             # 生放送情報を追加
-            live = Live(id)
+            live = NicoNicoLive(id)
             live.poster_id = poster_id
             live.poster_name = poster_name
             live.status = status
@@ -146,7 +146,7 @@ class Channel(Platform):
         # 結果を返す
         return lives
 
-    def __future_section(self, section: WebElement, poster_id: str, poster_name: str) -> list[Live]:
+    def __future_section(self, section: WebElement, poster_id: str, poster_name: str) -> list[NicoNicoLive]:
         lives = []
         item: WebElement
 
@@ -170,20 +170,20 @@ class Channel(Platform):
             scheduled_start_at: datetime = set_year(scheduled_start_at)  # 年を設定
 
             # 生放送情報を追加
-            live = Live(id)
+            live = NicoNicoLive(id)
             live.poster_id = poster_id
             live.poster_name = poster_name
             live.status = status
             live.title = title
             live.url = url
             live.thumbnail = thumbnail
-            live.scheduled_start_at = scheduled_start_at
+            live.start_at = scheduled_start_at
             lives.append(live)
 
         # 結果を返す
         return lives
 
-    def __past_section(self, section: WebElement, poster_id: str, poster_name: str) -> list[Live]:
+    def __past_section(self, section: WebElement, poster_id: str, poster_name: str) -> list[NicoNicoLive]:
         lives = []
         item: WebElement
         # アイテム要素を取得
@@ -207,26 +207,26 @@ class Channel(Platform):
             actual_start_at: datetime = set_year(actual_start_at)  # 年を設定
 
             # 生放送情報を追加
-            live = Live(id)
+            live = NicoNicoLive(id)
             live.poster_id = poster_id
             live.poster_name = poster_name
             live.status = status
             live.title = title
             live.url = url
             live.thumbnail = thumbnail
-            live.actual_start_at = actual_start_at
+            live.start_at = actual_start_at
             lives.append(live)
 
         # 結果を返す
         return lives
 
     # トップページの動画を取得する
-    def get_video(self, limit: int = 20) -> list[Video]:
+    def get_video(self, limit: int = 20) -> list[NicoNicoVideo]:
         """ニコニコチャンネルの動画ページから一覧をスクレイピングする"""
-        self.videos = self.__video_page_loop(limit)
-        return self.videos
+        videos = self.__video_page_loop(limit)
+        return videos
 
-    def __video_page_loop(self, limit: int) -> list[Video]:
+    def __video_page_loop(self, limit: int) -> list[NicoNicoVideo]:
         """ニコニコチャンネルの動画ページから一覧をスクレイピングする"""
         videos = []
 
@@ -301,7 +301,7 @@ class Channel(Platform):
             duration: timedelta = timedelta(minutes=int(minute), seconds=int(second))
 
             # 動画情報を追加
-            video = Video(id)
+            video = NicoNicoVideo(id)
             video.poster_id = poster_id
             video.poster_name = poster_name
             video.title = title
@@ -317,12 +317,12 @@ class Channel(Platform):
         return videos
 
     # トップページのニュースを取得する
-    def get_news(self, limit: int = 5) -> list[Channel.News]:
+    def get_news(self, limit: int = 5) -> list[NicoNicoChannel.News]:
         """チャンネルのニュースコンテンツを取得"""
-        self.newses = self.__fetch_news_feed(limit)
-        return self.newses
+        newses = self.__fetch_news_feed(limit)
+        return newses
 
-    def __fetch_news_feed(self, limit: int) -> list[Channel.News]:
+    def __fetch_news_feed(self, limit: int) -> list[NicoNicoChannel.News]:
         """チャンネルのニュースをfeedを使って取得する"""
         newses = []
 
@@ -346,7 +346,7 @@ class Channel(Platform):
             posted_at: datetime = datetime.strptime(entry["published"], "%a, %d %b %Y %H:%M:%S %z")  # ex:'Fri, 16 Jun 2023 12:00:00 +0900'
 
             # ニュース情報を追加
-            news = Channel.News(poster_id, id)
+            news = NicoNicoChannel.News(poster_id, id)
             news.poster_name = poster_name
             news.title = title
             news.url = url
@@ -369,7 +369,7 @@ class Channel(Platform):
             self.poster_id = poster_id
 
         @classmethod
-        def from_id(cls, poster_id: str, id: str) -> Channel.News:
+        def from_id(cls, poster_id: str, id: str) -> NicoNicoChannel.News:
             """IDからニュース情報を取得する"""
             news = cls(poster_id, id)
             news.get_detail()
@@ -426,11 +426,11 @@ class Channel(Platform):
 
 
 @execute_time()
-class Live(Live):
+class NicoNicoLive(Live):
     """生放送の情報を管理するクラス"""
 
     @classmethod
-    def from_id(cls, id: str) -> Live:
+    def from_id(cls, id: str) -> NicoNicoLive:
         """IDから生放送情報を取得する"""
         live = cls(id)
         live.get_detail()
@@ -539,11 +539,11 @@ class Live(Live):
 
 
 @execute_time()
-class Video(Video):
+class NicoNicoVideo(Video):
     """動画の情報を管理するクラス"""
 
     @classmethod
-    def from_id(cls, id: str) -> Video:
+    def from_id(cls, id: str) -> NicoNicoVideo:
         """IDから動画情報を取得する"""
         video = cls(id)
         video.get_detail()
