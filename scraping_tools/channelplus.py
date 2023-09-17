@@ -14,7 +14,7 @@ from selenium.webdriver.remote.webelement import WebElement
 from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import TimeoutException
 
-from .common import set_year, get_matching_element, get_matching_all_elements
+from .common import set_year, get_matching_element, get_matching_all_elements, ScrapingClass, Platform, Content, Live, Video, News
 from my_utilities.debug import execute_time
 
 
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 # TODO: 日付文字列の変換処理に改善の余地あり
 @execute_time()
-class ChannelPlus:
+class Channel(ScrapingClass):
     """ニコニコチャンネルプラスのコンテンツを取得するクラス"""
 
     root_xpath: str = '//div[@id="root"]'
@@ -464,3 +464,15 @@ class ChannelPlus:
                 raise ValueError(f"maybe news_id is wrong (URL:{self.driver.current_url})")
 
         return news
+
+
+class Video(Video):
+    pass
+
+
+class Live(Live):
+    pass
+
+
+class News(News):
+    pass
