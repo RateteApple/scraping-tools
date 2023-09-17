@@ -19,7 +19,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import StaleElementReferenceException
 from selenium.common.exceptions import NoSuchElementException
 
-from .common import set_year, get_matching_element, Live, Video, News, Content
+from .common import set_year, get_matching_element, ScrapingClass, Live, Video, News
 from my_utilities.debug import execute_time
 
 
@@ -33,44 +33,50 @@ NEWS_ID_PATTERN = "^ar\d+$"
 
 class NicoNico(object):
     @execute_time()
-    class Channel(Content):
+    class Channel(ScrapingClass):
         """ニコニコチャンネルのコンテンツを取得するクラス"""
 
-        # トップページの全てのコンテンツを取得する
-        def get_all(self) -> dict[list, list, list]:
-            """ニコニコチャンネルから全てのコンテンツを取得する(ページ数には制限あり)
+        platform = "niconico"
 
-            dictのキーは"news", "video", "live"
-            """
-            dict = {
-                "news": self.get_news(),
-                "video": self.get_video(),
-                "live": self.get_live(),
-            }
-            return dict
+        # トップページの全てのコンテンツを取得する
+        def get_all(
+            self, limit_live: int = 10, limit_video: int = 20, limit_news: int = 5
+        ) -> tuple[list[NicoNico.Live], list[NicoNico.Video], list[NicoNico.Channel.News]]:
+            """ニコニコチャンネルに含まれる全てのコンテンツを取得する"""
+            lives = self.get_live(limit_live)
+            videos = self.get_video(limit_video)
+            newses = self.get_news(limit_news)
+
+            return lives, videos, newses
 
         # トップページの生放送を取得する
-        def get_live(self, limit_page: int = 1, limit_item: int = 20) -> list[NicoNico.Live]:
+        def get_live(self, limit: int = 10) -> list[NicoNico.Live]:
+            """ニコニコチャンネルの生放送ページから一覧をスクレイピングする
+
+            1ページには大体10個の生放送が含まれている（放送予定、放送中の要素がある場合は増える）
+            """
+            self.lives = self.__live_page_loop(limit)
+            return self.lives
+
+        def __live_page_loop(self, limit: int) -> list[NicoNico.Live]:
             """ニコニコチャンネルの生放送ページから一覧をスクレイピングする"""
             lives = []
 
-            # 引数で指定されたページ数分ループ
-            page = 1
-            while page <= limit_page:
+            # 取得したアイテム数がlimitに達するまでループ
+            page = 0
+            while len(lives) < limit:
+                # ページカウントを進める
+                page += 1
+
                 # ページを開く
                 self.driver.get(f"https://ch.nicovideo.jp/{self.id}/live?page={page}")
 
                 # 1ページ目は放送中、放送予定、過去放送の全てを取得
                 if page == 1:
-                    lives.extend(self.__top_live_page(now=True, future=True, past=True))
+                    lives.extend(self.__live_page(now=True, future=True, past=True))
                 # 2ページ目以降は過去放送のみを取得
                 else:
-                    lives.extend(self.__top_live_page(now=False, future=False, past=True))
-
-                # 取得したアイテム数が指定されたアイテム数に達したら終了
-                if len(lives) >= limit_item:
-                    lives = lives[:limit_item]
-                    break
+                    lives.extend(self.__live_page(now=False, future=False, past=True))
 
                 # FIXME: 次のページがあるかどうかを確認
                 for _ in range(30):
@@ -82,12 +88,9 @@ class NicoNico(object):
                 else:
                     raise NicoNico.PageTransitionError(self.driver.current_url)
 
-                # ページカウントを進める
-                page += 1
-
             return lives
 
-        def __top_live_page(self, now=True, future=True, past=True) -> list[NicoNico.Live]:
+        def __live_page(self, now=True, future=True, past=True) -> list[NicoNico.Live]:
             lives = []
 
             # 投稿者の名前とIDを取得
@@ -218,23 +221,26 @@ class NicoNico(object):
             return lives
 
         # トップページの動画を取得する
-        def get_video(self, limit_page: int = 1, limit_item: int = 20) -> list[NicoNico.Video]:
+        def get_video(self, limit: int = 20) -> list[NicoNico.Video]:
+            """ニコニコチャンネルの動画ページから一覧をスクレイピングする"""
+            self.videos = self.__video_page_loop(limit)
+            return self.videos
+
+        def __video_page_loop(self, limit: int) -> list[NicoNico.Video]:
             """ニコニコチャンネルの動画ページから一覧をスクレイピングする"""
             videos = []
 
-            # 引数で指定されたページ数分ループ
+            # 取得したアイテム数がlimitに達するまでループ
             page = 1
-            while page <= limit_page:
+            while len(videos) < limit:
+                # ページカウントを進める
+                page += 1
+
                 # ページを開く
                 self.driver.get(f"https://ch.nicovideo.jp/{self.id}/video?page={page}")
 
                 # 情報を取得
-                videos.extend(self._top_video_page())
-
-                # 取得したアイテム数が指定されたアイテム数に達したら終了
-                if len(videos) >= limit_item:
-                    videos = videos[:limit_item]
-                    break
+                videos.extend(self.__video_page())
 
                 # 次のページがあるかどうかを確認
                 for _ in range(30):
@@ -246,13 +252,10 @@ class NicoNico(object):
                 else:
                     raise NicoNico.PageTransitionError(self.driver.current_url)
 
-                # ページカウントを進める
-                page += 1
-
             # 結果を返す
             return videos
 
-        def _top_video_page(self):
+        def __video_page(self) -> list[NicoNico.Video]:
             videos = []
             item: WebElement
 
@@ -314,8 +317,13 @@ class NicoNico(object):
             return videos
 
         # トップページのニュースを取得する
-        def get_news(self, limit_item: int = 20) -> list[NicoNico.Channel.News]:
-            """ニコニコチャンネルのニュースをfeedを使って取得する"""
+        def get_news(self, limit: int = 5) -> list[NicoNico.Channel.News]:
+            """チャンネルのニュースコンテンツを取得"""
+            self.newses = self.__fetch_news_feed(limit)
+            return self.newses
+
+        def __fetch_news_feed(self, limit: int) -> list[NicoNico.Channel.News]:
+            """チャンネルのニュースをfeedを使って取得する"""
             newses = []
 
             # RSSフィードを取得
@@ -346,8 +354,9 @@ class NicoNico(object):
                 news.posted_at = posted_at
                 newses.append(news)
 
-            # 指定された数だけニュースを取得
-            newses = newses[:limit_item]
+                # 取得したアイテム数がlimitに達したらループを抜ける
+                if len(newses) >= limit:
+                    break
 
             return newses
 
@@ -355,11 +364,9 @@ class NicoNico(object):
         class News(News):
             """ニュースの情報を管理するクラス"""
 
-            platform: str = "niconico"
-
             def __init__(self, poster_id: str, id: str) -> None:
                 super().__init__(id)
-                self.poster_id: str = poster_id
+                self.poster_id = poster_id
 
             @classmethod
             def from_id(cls, poster_id: str, id: str) -> NicoNico.Channel.News:
@@ -386,18 +393,16 @@ class NicoNico(object):
                 # URL
                 url: str = f"https://ch.nicovideo.jp/{poster_id}/blomaga/{id}"
                 # サムネイル
-                thumbnail: str = json_ld["image"]["url"] if "image" in json_ld else None
+                thumbnail: str = json_ld["image"]["url"] if "image" in json_ld else ""
                 # 投稿日時
                 posted_at_text: str = json_ld["datePublished"]  # ex:"2023-09-16 19:03:00"
                 posted_at: datetime = datetime.strptime(posted_at_text, "%Y-%m-%d %H:%M:%S")
-                posted_at: str = posted_at.isoformat()
                 # 更新日時
                 if "dateModified" in json_ld:
                     updated_at_text: str = json_ld["dateModified"]  # ex:"2023-09-16 23:13:17"
                     updated_at: datetime = datetime.strptime(updated_at_text, "%Y-%m-%d %H:%M:%S")
-                    updated_at: str = updated_at.isoformat()
                 else:
-                    updated_at: str = None
+                    updated_at = None
                 # 内容
                 body_elm: WebElement = self.wait.until(EC.presence_of_element_located((By.XPATH, '//div[@class="main_blog_txt"]')))
                 body: str = body_elm.text
@@ -418,16 +423,12 @@ class NicoNico(object):
     class Live(Live):
         """生放送の情報を管理するクラス"""
 
-        platform = "niconico"
-        timeshift_limit_at: str
-
-        def __getattr__(self, name: str):
-            super().__getattr__(name)
-            if name == "duration":
-                start = datetime.fromisoformat(self.start_at)
-                end = datetime.fromisoformat(self.end_at)
-                self.duration = (end - start).total_seconds()
-                return self.duration
+        @classmethod
+        def from_id(cls, id: str) -> NicoNico.Live:
+            """IDから生放送情報を取得する"""
+            live = cls(id)
+            live.get_detail()
+            return live
 
         def get_detail(self) -> None:
             """生放送の詳細情報をスクレイピングで取得する"""
@@ -446,9 +447,9 @@ class NicoNico(object):
             # 投稿者のURL
             author_url: list = json_ld["author"]["url"].split("/")
             # ユーザーIDまたはチャンネルID
-            poster_id = author_url[-2] if author_url[-1] == "join" else author_url[-1]
+            poster_id: str = author_url[-2] if author_url[-1] == "join" else author_url[-1]
             # チャンネルコンテンツか否か
-            is_channel_content = author_url[-1] == "join"
+            is_channel_content: str = author_url[-1] == "join"
             # タイトル
             title: str = json_ld["publication"]["name"]
             # サムネイル
@@ -463,55 +464,47 @@ class NicoNico(object):
             # 生放送の種類を判別（放送予定、放送中、過去放送）
             status, is_timeshift_enabled = self.__get_status()
 
-            # 放送中の場合は放送開始時間を取得
-            if status == "now":
-                actual_start_at: str = json_ld["publication"]["startDate"]
+            # 開始時間
+            start_at: str = json_ld["publication"]["startDate"]
+            start_at: datetime = datetime.fromisoformat(start_at)
 
-            # 放送予定の場合は予定開始時間を取得
-            if status == "future":
-                scheduled_start_at: str = json_ld["publication"]["startDate"]
-
-            # 過去放送の場合は放送開始時間、終了時間、長さを取得
+            # 過去放送の場合
             if status == "past":
-                actual_start_at: str = json_ld["publication"]["startDate"]
-                actual_end_at: str = json_ld["publication"]["endDate"]
+                end_at: str = json_ld["publication"]["endDate"]
+                end_at: datetime = datetime.fromisoformat(end_at)
+                duration: timedelta = end_at - start_at
 
-            # タイムシフトが有効な場合はタイムシフトの公開期間を取得
-            if status == "past" and is_timeshift_enabled:
+            # タイムシフトが有効な場合
+            if is_timeshift_enabled:
                 timeshift_limit_at: str = get_matching_element(
                     base_element=self.driver, tag="time", attribute="class", pattern=re.compile(r"^___program-viewing-period-date-time___.*$")
                 ).get_attribute("datetime")
                 timeshift_limit_at: datetime = datetime.strptime(timeshift_limit_at, "%Y-%m-%d %H:%M:%S")
-                timeshift_limit_at: str = timeshift_limit_at.isoformat()
 
             # 放送の開始時間、終了時間、長さ(過去放送のみ)
             if status == "past":
-                actual_start_at = json_ld["publication"]["startDate"]  # ISO8601形式
-                actual_end_at = json_ld["publication"]["endDate"]
+                start_at = json_ld["publication"]["startDate"]  # ISO8601形式
+                end_at = json_ld["publication"]["endDate"]
 
             # 生放送オブジェクトを作成
             self.id = id
             self.url = url
             self.poster_id = poster_id
-            self.is_channel_content = is_channel_content
             self.title = title
             self.thumbnail = thumbnail
             self.tags = tags
             self.description = description
             self.status = status
-            if status == "now":
-                self.start_at = actual_start_at
-            if status == "future":
-                self.start_at = scheduled_start_at
+            self.start_at = start_at
             if status == "past":
-                self.start_at = actual_start_at
-                self.end_at = actual_end_at
-                if is_timeshift_enabled:
-                    self.timeshift_limit_at = timeshift_limit_at
+                self.end_at = end_at
+                self.duration = duration
+            if is_timeshift_enabled:
+                self.archive_enabled_at = timeshift_limit_at
 
             return None
 
-        def __get_status(self) -> str:
+        def __get_status(self) -> tuple[str, bool]:
             """生放送の状態を判別する"""
             status: str
             is_timeshift_enabled: bool = False
@@ -544,7 +537,12 @@ class NicoNico(object):
     class Video(Video):
         """動画の情報を管理するクラス"""
 
-        platform = "niconico"
+        @classmethod
+        def from_id(cls, id: str) -> NicoNico.Video:
+            """IDから動画情報を取得する"""
+            video = cls(id)
+            video.get_detail()
+            return video
 
         def get_detail(self) -> None:
             """動画APIから情報を取得する"""
