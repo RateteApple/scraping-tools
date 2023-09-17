@@ -14,16 +14,16 @@ from selenium.webdriver.remote.webelement import WebElement
 from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import TimeoutException
 
-from .common import set_year, get_matching_element, get_matching_all_elements, parse_video_duration
-from my_utilities.debug_decorator import apply_output_debug
+from .common import set_year, get_matching_element, get_matching_all_elements
+from my_utilities.debug import execute_time
 
 
 logger = logging.getLogger(__name__)
 
 
 # TODO: 日付文字列の変換処理に改善の余地あり
-@apply_output_debug(exclude=("_news_page", "_content_page"))
-class NicoNicoChannelPlus:
+@execute_time()
+class ChannelPlus:
     """ニコニコチャンネルプラスのコンテンツを取得するクラス"""
 
     root_xpath: str = '//div[@id="root"]'
@@ -216,7 +216,7 @@ class NicoNicoChannelPlus:
                 uploaded_at: str = (datetime.now() - timedelta(days=before_days)).strftime("%Y/%m/%d")
             video["uploaded_at"]: str = datetime.strptime(uploaded_at, "%Y/%m/%d").isoformat()
             length: str = item_upper.find_element(By.XPATH, "./div[2]").text  # 00:00:00
-            length: timedelta = parse_video_duration(length)
+            length: timedelta = self.__parse_video_duration(length)
             video["length"]: int = int(timedelta.total_seconds(length))  # 秒数に変換
             video["view_count"]: int = int(item_under.find_element(By.XPATH, "./div/div/div[1]/div").text)
             video["comment_count"]: int = int(item_under.find_element(By.XPATH, "./div/div/div[2]/div").text)
@@ -224,6 +224,30 @@ class NicoNicoChannelPlus:
             videos.append(video)
 
         return videos
+
+    # 動画時間文字列を時間、分、秒に分割する関数
+    def __parse_video_duration(duration_str: str) -> timedelta:
+        """動画時間文字列を時間、分、秒に分割する
+
+        '00:00:00'もしくは'00:00'のような形式で引数を渡す
+        """
+        # 時間、分、秒の要素を取得
+        parts: list = duration_str.split(":")
+        if len(parts) == 3:
+            seconds: int = int(parts[-1])
+            minutes: int = int(parts[-2])
+            hours: int = int(parts[-3])
+        elif len(parts) == 2:
+            seconds: int = int(parts[-1])
+            minutes: int = int(parts[-2])
+            hours: int = 0
+        else:
+            raise ValueError(f"invalid duration_str (duration_str:{duration_str})")
+
+        # timedelta オブジェクトを作成
+        video_duration = timedelta(hours=hours, minutes=minutes, seconds=seconds)
+
+        return video_duration
 
     # トップページのニュースを取得するメソッド
     def top_news(self, channel_id: str, full_info: bool = False) -> list[dict]:

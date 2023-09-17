@@ -1,5 +1,4 @@
-from .niconicochannel import NicoNicoChannel
-from .niconicochannelplus import NicoNicoChannelPlus
+from .niconico import NicoNico
+from .niconicochannelplus import ChannelPlus
 from .youtube import YouTube
-
-__all__ = ["NicoNicoChannel", "NicoNicoChannelPlus", "YouTube"]
+from .common import ScrapingClass, Platform, Content, Live, Video, News
