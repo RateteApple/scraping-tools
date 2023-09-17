@@ -3,10 +3,194 @@
 from __future__ import annotations
 from datetime import datetime, timedelta
 import re
+from pprint import pformat
 
+from selenium import webdriver
 from selenium.webdriver.remote.webelement import WebElement
+from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import StaleElementReferenceException
+
+
+class ScrapingClass(object):
+    is_headless: bool = True
+    timeout: int = 20
+
+    def __del__(self) -> None:
+        # ブラウザを閉じる
+        self.close_browser()
+
+    def set_browser_settings(self, is_headless: bool = True, timeout: int = 20) -> None:
+        """ブラウザの設定を変更する
+
+        設定はクラス変数に保存されるため、インスタンス生成前にコールすること。"""
+
+        self.is_headless = is_headless
+        self.timeout = timeout
+
+    @classmethod
+    def set_browser_settings_all(cls, is_headless: bool = True, timeout: int = 20) -> None:
+        """全てのクラスのブラウザ設定を変更する
+
+        設定はクラス変数に保存されるため、インスタンス生成前にコールすること。"""
+
+        cls.is_headless = is_headless
+        cls.timeout = timeout
+
+    def open_browser(self, is_headless: bool = None, timeout: int = None) -> None:
+        """ブラウザを開く
+
+        オプションを指定しなかった場合はクラス変数の値を使用する
+        """
+        options = webdriver.ChromeOptions()
+        options.add_argument("--no-sandbox")  # 保護機能を無効化
+        options.add_argument("--disable-gpu")  # GPUの使用を無効化
+        options.add_argument("--window-size=1920,1080")  # Windowサイズを1920x1080に設定
+        options.add_experimental_option("excludeSwitches", ["enable-logging"])  # ログを無効化
+        options.add_argument("--blink-settings=imagesEnabled=false")  # 画像を読み込まない
+        options.add_argument("--disable-extensions")  # 拡張機能を無効化
+
+        if not is_headless:
+            is_headless = self.__class__.is_headless
+        if not timeout:
+            timeout = self.__class__.timeout
+
+        if is_headless:
+            options.add_argument("--headless")
+
+        self.driver = webdriver.Chrome(options)
+        self.wait = WebDriverWait(self.driver, self.timeout)
+
+        return self.driver
+
+    def close_browser(self) -> None:
+        """ブラウザを閉じる"""
+        try:
+            self.driver.quit()
+        except AttributeError:
+            pass
+
+
+class Platform(ScrapingClass):
+    platfrom: str
+
+
+class Content(ScrapingClass):
+    """ニュースの情報を管理するクラス"""
+
+    id: str
+    poster_id: str
+    poster_name: str
+    title: str
+    url: str
+    posted_at: datetime
+    updated_at: datetime
+    tags: list[str]
+
+    def __init__(self, id: str) -> None:
+        super().__init__(id)
+        self.poster_id = ""
+        self.poster_name = ""
+        self.title = ""
+        self.url = ""
+        self.posted_at = ""
+        self.updated_at = ""
+        self.tags = []
+
+    def __str__(self) -> str:
+        return f"ID: {self.id}, Title: {self.title}, URL: {self.url}"
+
+    def __repr__(self) -> str:
+        # is_headlessとtimeoutを除外
+        result = {}
+        for key, value in vars(self).items():
+            if key in ["is_headless", "timeout"]:
+                continue
+            result[key] = value
+
+        return pformat(result)
+
+    @classmethod
+    def from_dict(cls, dict: dict) -> Content:
+        """辞書からインスタンスを生成する"""
+        # インスタンスを生成
+        instance = cls(dict["id"])
+        # 属性を設定
+        for key, value in dict.items():
+            setattr(instance, key, value)
+
+        # インスタンスを返す
+        return instance
+
+    def to_dict(self) -> dict:
+        result = {}
+        # 属性を取得
+        for key, value in vars(self).items():
+            # is_headlessとtimeoutは除外
+            if key in ["is_headless", "timeout"]:
+                continue
+            result[key] = value
+
+        return result
+
+    @staticmethod
+    def diff(base: object, target: object) -> dict:
+        """2つのインスタンスを比較して変更点を返す"""
+        # クラスが異なる場合はNotImplemented
+        if not base.__class__.__name__ == target.__class__.__name__:
+            return NotImplemented
+
+        # 変更点を取得
+        diffs = {}
+        for key, value in target.__dict__.items():
+            # str, int, float, bool, list, dict, tuple, None以外は除外
+            if not isinstance(value, (str, int, float, bool, list, dict, type(None))):
+                continue
+            # 変更点がある場合は追加
+            if base.__dict__[key] != value:
+                diff = {key: (base.__dict__[key], value)}
+                diffs.update(diff)
+
+        # 結果を返す
+        return diffs
+
+
+class Video(Content):
+    description: str
+    duration: timedelta
+    view_count: int
+    like_count: int
+    comment_count: int
+
+    def __init__(self, id: str) -> None:
+        super().__init__(id)
+        self.description = ""
+        self.duration = ""
+        self.view_count = 0
+        self.like_count = 0
+        self.comment_count = 0
+
+
+class Live(Content):
+    start_at: datetime
+    end_at: datetime
+    status: str
+    archive_enabled_at: datetime
+
+    def __init__(self, id: str) -> None:
+        super().__init__(id)
+        self.start_at = ""
+        self.end_at = ""
+        self.status = ""
+        self.archive_enabled_at = ""
+
+
+class News(Content):
+    body: str
+
+    def __init__(self, id: str) -> None:
+        super().__init__(id)
+        self.body = ""
 
 
 # 年部分を補完する関数
@@ -71,29 +255,3 @@ def get_matching_all_elements(base_element: WebElement, tag: str, attribute: str
 
     # 要素を返す
     return match_elements
-
-
-# 動画時間文字列を時間、分、秒に分割する関数
-def parse_video_duration(duration_str: str) -> timedelta:
-    """動画時間文字列を時間、分、秒に分割する
-
-    '00:00:00'もしくは'00:00'のような形式で引数を渡す
-    """
-
-    # 時間、分、秒の要素を取得
-    parts: list = duration_str.split(":")
-    if len(parts) == 3:
-        seconds: int = int(parts[-1])
-        minutes: int = int(parts[-2])
-        hours: int = int(parts[-3])
-    elif len(parts) == 2:
-        seconds: int = int(parts[-1])
-        minutes: int = int(parts[-2])
-        hours: int = 0
-    else:
-        raise Exception("引数の形式が不正です")
-
-    # timedelta オブジェクトを作成
-    video_duration = timedelta(hours=hours, minutes=minutes, seconds=seconds)
-
-    return video_duration
