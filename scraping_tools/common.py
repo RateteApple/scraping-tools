@@ -4,6 +4,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 import re
 from pprint import pformat
+from typing import Any
+import unicodedata
 
 from selenium import webdriver
 from selenium.webdriver.remote.webelement import WebElement
@@ -19,6 +21,12 @@ class ScrapingClass(object):
     def __del__(self) -> None:
         # ブラウザを閉じる
         self.close_browser()
+
+    def __getattr__(self, name: str) -> None:
+        """ブラウザが開かれていない場合にブラウザを開く"""
+        if name == "driver":
+            self.open_browser()
+            return self.driver
 
     def set_browser_settings(self, is_headless: bool = True, timeout: int = 20) -> None:
         """ブラウザの設定を変更する
@@ -65,18 +73,18 @@ class ScrapingClass(object):
 
     def close_browser(self) -> None:
         """ブラウザを閉じる"""
-        try:
+        # インスタンス変数にブラウザが存在する場合は閉じる
+        if hasattr(self, "driver"):
             self.driver.quit()
-        except AttributeError:
-            pass
 
 
 class Platform(ScrapingClass):
-    platfrom: str
+    def __init__(self, id: str) -> None:
+        self.id = id
 
 
 class Content(ScrapingClass):
-    """ニュースの情報を管理するクラス"""
+    """コンテンツの基底クラス"""
 
     id: str
     poster_id: str
@@ -86,16 +94,18 @@ class Content(ScrapingClass):
     posted_at: datetime
     updated_at: datetime
     tags: list[str]
+    is_deleted: bool
 
     def __init__(self, id: str) -> None:
-        super().__init__(id)
-        self.poster_id = ""
-        self.poster_name = ""
-        self.title = ""
-        self.url = ""
-        self.posted_at = ""
-        self.updated_at = ""
-        self.tags = []
+        self.id: str = id
+        self.poster_id: str = ""
+        self.poster_name: str = ""
+        self.title: str = ""
+        self.url: str = ""
+        self.posted_at: datetime = None
+        self.updated_at: datetime = None
+        self.tags: list[str] = []
+        self.is_deleted: bool = False
 
     def __str__(self) -> str:
         return f"ID: {self.id}, Title: {self.title}, URL: {self.url}"
@@ -109,6 +119,17 @@ class Content(ScrapingClass):
             result[key] = value
 
         return pformat(result)
+
+    def __setattr__(self, __name: str, __value: Any) -> None:
+        # datetime型
+        if __name == "posted_at" or __name == "updated_at":
+            if isinstance(__value, str) and __value:
+                __value = datetime.fromisoformat(__value)
+        # タイトル
+        elif __name == "title":
+            __value = unicodedata.normalize("NFKC", __value)
+
+        super().__setattr__(__name, __value)
 
     @classmethod
     def from_dict(cls, dict: dict) -> Content:
@@ -170,6 +191,13 @@ class Video(Content):
         self.like_count = 0
         self.comment_count = 0
 
+    def __setattr__(self, __name: str, __value: Any) -> None:
+        # description
+        if __name == "description":
+            __value = unicodedata.normalize("NFKC", __value)
+
+        super().__setattr__(__name, __value)
+
 
 class Live(Content):
     start_at: datetime
@@ -184,6 +212,14 @@ class Live(Content):
         self.status = ""
         self.archive_enabled_at = ""
 
+    def __setattr__(self, __name: str, __value: Any) -> None:
+        # datetime型
+        if __name == "start_at" or __name == "end_at" or __name == "archive_enabled_at":
+            if isinstance(__value, str) and __value:
+                __value = datetime.fromisoformat(__value)
+
+        super().__setattr__(__name, __value)
+
 
 class News(Content):
     body: str
@@ -191,6 +227,13 @@ class News(Content):
     def __init__(self, id: str) -> None:
         super().__init__(id)
         self.body = ""
+
+    def __setattr__(self, __name: str, __value: Any) -> None:
+        # body
+        if __name == "body":
+            __value = unicodedata.normalize("NFKC", __value)
+
+        super().__setattr__(__name, __value)
 
 
 # 年部分を補完する関数

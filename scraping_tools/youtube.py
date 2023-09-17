@@ -6,13 +6,13 @@ import json
 
 from googleapiclient.discovery import build
 
-from my_utilities.debug_decorator import apply_output_debug
+from my_utilities.debug import execute_time
 
 
 logger = logging.getLogger(__name__)
 
 
-@apply_output_debug(exclude=("_get_common_part", "_get_live_part"))
+@execute_time
 class YouTube:
     """YouTubeAPIのヘルパークラス"""
 

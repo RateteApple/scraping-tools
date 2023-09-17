@@ -10,6 +10,7 @@ import os
 import time
 from functools import wraps
 from pprint import pprint, pformat
+import xml.etree.ElementTree as ET
 
 from selenium import webdriver
 from selenium.webdriver.remote.webelement import WebElement
@@ -19,7 +20,9 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import StaleElementReferenceException
 from selenium.common.exceptions import NoSuchElementException
 
-from .common import set_year, get_matching_element, ScrapingClass, Live, Video, News
+from bs4 import BeautifulSoup
+
+from .common import set_year, get_matching_element, Platform, Live, Video, News
 from my_utilities.debug import execute_time
 
 
@@ -33,7 +36,7 @@ NEWS_ID_PATTERN = "^ar\d+$"
 
 class NicoNico(object):
     @execute_time()
-    class Channel(ScrapingClass):
+    class Channel(Platform):
         """ニコニコチャンネルのコンテンツを取得するクラス"""
 
         platform = "niconico"
@@ -231,7 +234,7 @@ class NicoNico(object):
             videos = []
 
             # 取得したアイテム数がlimitに達するまでループ
-            page = 1
+            page = 0
             while len(videos) < limit:
                 # ページカウントを進める
                 page += 1
@@ -275,7 +278,7 @@ class NicoNico(object):
                 # 動画ID
                 id: str = url.split("/")[-1]
                 # タイトル
-                title: str = item.find_element(By.XPATH, ".//a").get_attribute("title")
+                title: str = item.find_element(By.XPATH, ".//h6/a").get_attribute("title")
                 # サムネイル
                 thumbnail: str = item.find_element(By.XPATH, ".//img").get_attribute("src")
                 # 投稿日時
@@ -376,13 +379,19 @@ class NicoNico(object):
                 return news
 
             def get_detail(self) -> None:
-                # ニュースのページを開く
-                self.driver.get(f"https://ch.nicovideo.jp/{self.poster_id}/blomaga/{self.id}")
+                # ページを取得
+                res = requests.get(f"https://ch.nicovideo.jp/{self.poster_id}/blomaga/{self.id}")
 
-                # JSON-LDタグを取得
-                json_ld_elm: WebElement = self.wait.until(EC.presence_of_element_located((By.XPATH, 'script[@type="application/ld+json"]')))
-                json_ld: str = json_ld_elm.get_attribute("innerHTML")
-                json_ld: str = json.loads(json_ld)[0]
+                # ステータスコードを確認
+                if res.status_code != 200 and res.status_code != 301:
+                    raise
+
+                # BS4でパース
+                soup = BeautifulSoup(res.text, "html.parser")
+
+                # JSON-LDタグを取得 ( <script type="application/ld+json">)
+                json_ld = soup.find("script", type="application/ld+json").string
+                json_ld = json.loads(json_ld)[0]
 
                 # 投稿者ID
                 poster_id: str = json_ld["image"]["url"].split("/")[-2]
@@ -404,8 +413,7 @@ class NicoNico(object):
                 else:
                     updated_at = None
                 # 内容
-                body_elm: WebElement = self.wait.until(EC.presence_of_element_located((By.XPATH, '//div[@class="main_blog_txt"]')))
-                body: str = body_elm.text
+                body: str = soup.find("div", attrs={"class": "main_blog_txt"}).text
 
                 # ニュース情報を設定
                 self.poster_id = poster_id
@@ -443,7 +451,7 @@ class NicoNico(object):
             # URL
             url: str = json_ld["embedUrl"]
             # ID
-            id: str = json_ld["url"].split("/")[-1]
+            id: str = url.split("/")[-1]
             # 投稿者のURL
             author_url: list = json_ld["author"]["url"].split("/")
             # ユーザーIDまたはチャンネルID
@@ -552,50 +560,70 @@ class NicoNico(object):
             if res.status_code != 200:
                 raise NicoNico.FetchVideoError(self.id, res.status_code)
 
-            # dict型に変換
+            # テキストに変換
             res.text.encode("utf-8")
-            res_dict = xmltodict.parse(res.text)["nicovideo_thumb_response"]["thumb"]
+
+            # # XMLを保存
+            # with open(f"{self.id}.xml", mode="w", encoding="utf-8") as f:
+            #     f.write(res.text)
+
+            # ElementTreeに変換
+            root = ET.fromstring(res.text)
+
+            # 削除されているか
+            if not root.attrib["status"] == "ok":
+                self.is_deleted = True
+                return None
 
             # ID
-            id: str = res_dict["video_id"]
+            id: str = root.find(".//video_id").text
             # 投稿者名とID
-            if "ch_id" in res_dict:
-                poster_id: str = res_dict["ch_id"]
-                poster_name: str = res_dict["ch_name"]
-            elif "user_id" in res_dict:
-                poster_id: str = res_dict["user_id"]
-                poster_name: str = res_dict["user_nickname"]
+            if root.find(".//ch_id") is not None:
+                poster_id: str = root.find(".//ch_id").text
+                poster_name: str = root.find(".//ch_name").text
+            else:
+                poster_id: str = root.find(".//user_id").text
+                poster_name: str = root.find(".//user_nickname").text
             # タイトル
-            title: str = res_dict["title"]
+            title: str = root.find(".//title").text
+            # URL
+            url: str = root.find(".//watch_url").text
             # サムネイル
-            thumbnail: str = res_dict["thumbnail_url"]
+            thumbnail: str = root.find(".//thumbnail_url").text
             # 公開日時
-            posted_at: str = res_dict["first_retrieve"]
+            posted_at: str = root.find(".//first_retrieve").text
             posted_at: datetime = datetime.fromisoformat(posted_at)
             # 再生時間
-            length_text: str = res_dict["length"]
+            length_text: str = root.find(".//length").text
             minute, second = length_text.split(":")
             duration: timedelta = timedelta(minutes=int(minute), seconds=int(second))
             # 再生数
-            view_count: int = int(res_dict["view_counter"])
+            view_count: int = int(root.find(".//view_counter").text)
             # コメント数
-            comment_count: int = int(res_dict["comment_num"])
+            comment_count: int = int(root.find(".//comment_num").text)
             # マイリスト数
-            my_list_count: int = int(res_dict["mylist_counter"])
-            # TODO: 削除されているかどうか
-            is_deleted: bool = True if res_dict["@status"] == "fail" else False
+            my_list_count: int = int(root.find(".//mylist_counter").text)
+            # タグ
+            tags = []
+            for tag in root.findall(".//tags/tag"):
+                tags.append(tag.text)
+            # 説明文
+            description: str = root.find(".//description").text
 
             # 動画情報を設定
             self.id = id
             self.poster_id = poster_id
             self.poster_name = poster_name
             self.title = title
+            self.url = url
             self.thumbnail = thumbnail
             self.posted_at = posted_at
             self.duration = duration
             self.view_count = view_count
             self.comment_count = comment_count
             self.my_list_count = my_list_count
+            self.tags = tags
+            self.description = description
 
             return None
 
