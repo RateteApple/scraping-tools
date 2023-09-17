@@ -22,7 +22,8 @@ from selenium.common.exceptions import NoSuchElementException
 
 from bs4 import BeautifulSoup
 
-from .common import set_year, get_matching_element, Platform, Live, Video, News
+from .base_class import Platform, Live, Video, News
+from .common_func import get_matching_element, get_matching_all_elements
 from my_utilities.debug import execute_time
 
 
@@ -38,10 +39,11 @@ NEWS_ID_PATTERN = "^ar\d+$"
 class NicoNicoChannel(Platform):
     """ニコニコチャンネルのコンテンツを取得するクラス"""
 
+    def __init__(self, channel_id: str):
+        super().__init__(channel_id)
+
     # トップページの全てのコンテンツを取得する
-    def get_all(
-        self, limit_live: int = 10, limit_video: int = 20, limit_news: int = 5
-    ) -> tuple[list[NicoNicoLive], list[NicoNicoVideo], list[NicoNicoChannel.News]]:
+    def get_all(self, limit_live: int = 10, limit_video: int = 20, limit_news: int = 5) -> tuple[list[NicoNicoLive], list[NicoNicoVideo], list[NicoNicoChannel.News]]:
         """ニコニコチャンネルに含まれる全てのコンテンツを取得する"""
         lives = self.get_live(limit_live)
         videos = self.get_video(limit_video)
@@ -86,7 +88,7 @@ class NicoNicoChannel(Platform):
                     break
                 time.sleep(0.2)  # FIXME
             else:
-                raise PageTransitionError(self.driver.current_url)
+                raise  # FIXME
 
         return lives
 
@@ -94,9 +96,7 @@ class NicoNicoChannel(Platform):
         lives = []
 
         # 投稿者の名前とIDを取得
-        icon_link: WebElement = get_matching_element(
-            base_element=self.driver, tag="span", attribute="class", pattern=re.compile(r"^.*thumb_wrapper_ch.*$")
-        )
+        icon_link: WebElement = get_matching_element(base=self.driver, tag="span", attribute="class", pattern=r"^.*thumb_wrapper_ch.*$")
         poster_name: str = icon_link.find_element(By.XPATH, "./a").get_attribute("title")
         poster_id: str = icon_link.find_element(By.XPATH, "./a").get_attribute("href").split("/")[-1]
 
@@ -163,11 +163,6 @@ class NicoNicoChannel(Platform):
             id = url.split("/")[-1]
             # サムネイル
             thumbnail = item.find_element(By.XPATH, ".//img").get_attribute("src")
-            # 開始日時
-            scheduled_start_at: str = item.find_element(By.XPATH, './/p[@class="date"]/strong').text
-            scheduled_start_at: str = re.sub(r"\s*\([^)]*\)", "", scheduled_start_at)  # 曜日部分を削除
-            scheduled_start_at: datetime = datetime.strptime(scheduled_start_at, "%m月%d日 %H時%M分")  # datetime型に変換
-            scheduled_start_at: datetime = set_year(scheduled_start_at)  # 年を設定
 
             # 生放送情報を追加
             live = NicoNicoLive(id)
@@ -177,7 +172,6 @@ class NicoNicoChannel(Platform):
             live.title = title
             live.url = url
             live.thumbnail = thumbnail
-            live.start_at = scheduled_start_at
             lives.append(live)
 
         # 結果を返す
@@ -204,7 +198,6 @@ class NicoNicoChannel(Platform):
             actual_start_at: str = item.find_element(By.XPATH, './/p[@class="date"]').text  # ex:"放送開始：2023/09/04 (月) 22:50:00"
             actual_start_at: str = re.sub(r"\s*\([^)]*\)", "", actual_start_at)  # 曜日部分を削除
             actual_start_at: datetime = datetime.strptime(actual_start_at, "放送開始：%Y/%m/%d %H:%M:%S")  # datetime型に変換
-            actual_start_at: datetime = set_year(actual_start_at)  # 年を設定
 
             # 生放送情報を追加
             live = NicoNicoLive(id)
@@ -250,7 +243,7 @@ class NicoNicoChannel(Platform):
                     break
                 time.sleep(0.2)  # FIXME
             else:
-                raise PageTransitionError(self.driver.current_url)
+                raise  # FIXME
 
         # 結果を返す
         return videos
@@ -260,9 +253,7 @@ class NicoNicoChannel(Platform):
         item: WebElement
 
         # 投稿者の名前とIDを取得
-        icon_link: WebElement = get_matching_element(
-            base_element=self.driver, tag="span", attribute="class", pattern=re.compile(r"^.*thumb_wrapper_ch.*$")
-        )
+        icon_link: WebElement = get_matching_element(base=self.driver, tag="span", attribute="class", pattern=r"^.*thumb_wrapper_ch.*$")
         poster_name: str = icon_link.find_element(By.XPATH, "./a").get_attribute("title")
         poster_id: str = icon_link.find_element(By.XPATH, "./a").get_attribute("href").split("/")[-1]
 
@@ -333,7 +324,7 @@ class NicoNicoChannel(Platform):
         if feed["status"] == 200 or feed["status"] == 301 or feed["bozo"] == False:
             pass
         else:
-            raise FetchNewsError(self.id, feed["status"])
+            raise  # FIXME
 
         # ニュースのアイテムを取得
         for entry in feed["entries"]:
@@ -463,9 +454,8 @@ class NicoNicoLive(Live):
         # タグ
         tags: list = json_ld["keywords"]
         # 説明文
-        description: str = get_matching_element(
-            base_element=self.driver, tag="div", attribute="class", pattern=re.compile(r"^___description___.*$")
-        ).text
+        description: WebElement = get_matching_element(base=self.driver, tag="div", attribute="class", pattern=r"^___description___.*$")
+        description: str = description.text
 
         # 生放送の種類を判別（放送予定、放送中、過去放送）
         status, is_timeshift_enabled = self.__get_status()
@@ -482,9 +472,8 @@ class NicoNicoLive(Live):
 
         # タイムシフトが有効な場合
         if is_timeshift_enabled:
-            timeshift_limit_at: str = get_matching_element(
-                base_element=self.driver, tag="time", attribute="class", pattern=re.compile(r"^___program-viewing-period-date-time___.*$")
-            ).get_attribute("datetime")
+            timeshift_limit_at: WebElement = get_matching_element(base=self.driver, tag="time", attribute="class", pattern=r"^___program-viewing-period-date-time___.*$")
+            timeshift_limit_at: str = timeshift_limit_at.get_attribute("datetime")
             timeshift_limit_at: datetime = datetime.strptime(timeshift_limit_at, "%Y-%m-%d %H:%M:%S")
 
         # 放送の開始時間、終了時間、長さ(過去放送のみ)
@@ -516,11 +505,9 @@ class NicoNicoLive(Live):
         is_timeshift_enabled: bool = False
 
         # タイムシフトの公開期間を取得
-        timeshift_element = get_matching_element(
-            base_element=self.driver, tag="time", attribute="class", pattern=re.compile(r"^___program-viewing-period-date-time___.*$")
-        )
+        timeshift_element = get_matching_element(base=self.driver, tag="time", attribute="class", pattern=r"^___program-viewing-period-date-time___.*$")
         # 動画上に表示されるメッセージを取得
-        message_element = get_matching_element(base_element=self.driver, tag="p", attribute="class", pattern=re.compile(r"^___primary-message___.*$"))
+        message_element = get_matching_element(base=self.driver, tag="p", attribute="class", pattern=r"^___primary-message___.*$")
         # LIVE中のボタンを取得
         live_button: list = self.driver.find_elements(By.XPATH, '//button[@data-live-status="live"]')
 
@@ -555,7 +542,7 @@ class NicoNicoVideo(Video):
         res = requests.get(f"https://ext.nicovideo.jp/api/getthumbinfo/{self.id}")
         # ステータスコードを確認
         if res.status_code != 200:
-            raise FetchVideoError(self.id, res.status_code)
+            raise  # FIXME
 
         # テキストに変換
         res.text.encode("utf-8")
@@ -625,50 +612,32 @@ class NicoNicoVideo(Video):
         return None
 
 
-# チャンネルIDの形式を検証
+# チャンネルIDがパターンに一致しない場合例外を発生させる
 @staticmethod
 def check_channel_id(channel_id: str):
     if not re.match(CHANNEL_ID_PATTERN, channel_id):
         raise InvalidChannelIdPatternError(channel_id)
 
 
-# 生放送IDの形式を検証
+# 生放送IDがパターンに一致しない場合例外を発生させる
 @staticmethod
 def check_live_id(live_id: str):
     if not re.match(LIVE_ID_PATTERN, live_id):
         raise InvalidLiveIdPatternError(live_id)
 
 
-# 動画IDの形式を検証
+# 動画IDがパターンに一致しない場合例外を発生させる
 @staticmethod
 def check_video_id(video_id: str):
     if not re.match(VIDEO_ID_PATTERN, video_id):
         raise InvalidVideoIdPatternError(video_id)
 
 
-# ニュースIDの形式を検証
+# ニュースIDがパターンに一致しない場合例外を発生させる
 @staticmethod
 def check_news_id(news_id: str):
     if not re.match(NEWS_ID_PATTERN, news_id):
         raise InvalidNewsIdPatternError(news_id)
-
-
-# ページの遷移に失敗した場合の例外
-class PageTransitionError(Exception):
-    def __init__(self, url):
-        super().__init__(f"Page transition failed. Current URL: {url}")
-
-
-# 動画APIから情報を取得するのに失敗した場合の例外
-class FetchVideoError(Exception):
-    def __init__(self, video_id, status_code):
-        super().__init__(f"Video API connection failed. ID: {video_id}, Status code: {status_code}")
-
-
-# Feedを使ったニュースの取得に失敗した場合の例外
-class FetchNewsError(Exception):
-    def __init__(self, channel_id, status_code):
-        super().__init__(f"Fetch news failed. channel_id: {channel_id}, status_code: {status_code}")
 
 
 # チャンネルIDの形式が不正な場合の例外

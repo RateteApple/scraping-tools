@@ -14,7 +14,8 @@ from selenium.webdriver.remote.webelement import WebElement
 from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import TimeoutException
 
-from .common import set_year, get_matching_element, get_matching_all_elements, ScrapingClass, Platform, Content, Live, Video, News
+from .base_class import ScrapingClass, Platform, Content, Live, Video, News
+from .common_func import get_matching_element, get_matching_all_elements, parse_video_duration
 from my_utilities.debug import execute_time
 
 
@@ -29,443 +30,343 @@ not_found_xpath2: str = '//h5[text()="お探しのページは見つかりませ
 
 
 @execute_time()
-class Channel(ScrapingClass):
+class ChannelPlusChannel(ScrapingClass):
     """ニコニコチャンネルプラスのコンテンツを取得するクラス"""
 
-    # コンストラクタ
-    def __init__(self):
-        """コンストラクタ"""
-        pass
+    def __init__(self, channel_name: str) -> None:
+        super().__init__(channel_name)
 
-    # デストラクタ
-    def __del__(self):
-        """デストラクタ"""
-        # ブラウザを終了
-        self.driver.quit()
-        logger.debug(f"close browser")
+    # トップページの全てのコンテンツを取得する
+    def get_all(self, limit_video: int = 0, limit_news: int = 0) -> dict:
+        lives = self.get_live(limit=limit_live)
+        videos = self.get_video(limit=limit_video)
+        newses = self.get_news(limit=limit_news)
 
-    # get attribute
-    def __getattr__(self, name):
-        """属性が見つからなかった場合の処理"""
-        # メソッド名の提案
-        if name == "video":
-            error_message = "video()は存在しません。content()を使ってください。"
-            raise AttributeError(error_message)
-        elif name == "live":
-            error_message = "live()は存在しません。content()を使ってください。"
-            raise AttributeError(error_message)
+        return lives, videos, newses
 
-        # driverが起動されていない場合、起動する
-        if name == "driver":
-            # ブラウザのオプションを設定
-            options = webdriver.ChromeOptions()
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-gpu")
-            options.add_argument("--window-size=1920,1080")
-            options.add_experimental_option("excludeSwitches", ["enable-logging"])
-            if self.is_headless:
-                options.add_argument("--headless")
+    # トップページの生放送を取得する
+    def get_live(self) -> list[ChannelPlusLive]:
+        lives = self.__live_page()
+        return lives
 
-            # ブラウザを起動
-            if self.is_headless:
-                logger.debug(f"open browser : headless mode")
-            else:
-                logger.debug(f"open browser : GUI mode")
-            self.driver = webdriver.Chrome(options=options)
-
-            # 待機時間を設定
-            self.wait = WebDriverWait(self.driver, self.default_wait_time)
-            self.retry_count: int = int(self.default_wait_time / self.retry_interval)
-
-            return self.driver
-
-    # トップページの生放送を取得するメソッド
-    def top_live(self, channel_id: str) -> list[dict]:
+    def __live_page(self) -> list[ChannelPlusLive]:
         """ニコニコチャンネルプラスの生放送ページから配信中の放送と放送予定を取得するメソッド"""
         lives = []
 
         # 生放送ページを開く
-        self.driver.get(f"https://nicochannel.jp/{channel_id}/lives")
+        self.driver.get(f"https://nicochannel.jp/{self.id}/lives")
 
         # セクションを取得出来るまでリトライ
-        for _ in range(self.retry_count):
-            sections: list = self.driver.find_elements(By.XPATH, f"{self.main_xpath}/div/div")
+        start = time.time()
+        while True:
+            sections: list = self.driver.find_elements(By.XPATH, f"{main_xpath}/div/div")
             if len(sections) >= 2:
                 break
-            time.sleep(self.retry_interval)  # FIXME: 可能であれば非同期処理にする
-        # セクションが取得出来なかった場合はエラーを投げる
-        else:
-            if self.driver.find_element(By.XPATH, self.not_found_xpath):
-                raise ValueError(f"maybe channel_id is wrong (ID:{channel_id})")
-            else:
-                raise ValueError(f"unknown error (URL:{self.driver.current_url})")
+            if time.time() - start > 20:
+                raise  # FIXME: 例外処理をちゃんとする
 
-        # 放送中か判定
+        # 生放送のリストを取得
+        lives = []
         if len(sections) == 3:
-            logger.debug(f"streaming now")
-            now_section: WebElement = sections[0]
-            future_section: WebElement = sections[1]
+            lives.extend(self.__get_from_now_section(sections[0]))
+            lives.extend(self.__get_from_future_section(sections[1]))
         else:
-            now_section: WebElement = None
-            future_section: WebElement = sections[0]
+            lives.extend(self.__get_from_future_section(sections[0]))
 
-        # 放送中の生放送
-        if now_section:
-            # 放送中の生放送情報を取得
-            live = {}
-            live["channel_id"]: str = channel_id
-            live["status"]: str = "now"
-            # TODO: 放送中の生放送の情報を取得する
-            lives.append(live)
+        # 結果を返す
+        return lives
 
-        # 放送予定
-        for _ in range(30):
-            items = get_matching_all_elements(
-                base_element=future_section, tag="a", attribute="class", pattern=re.compile(r"^MuiButtonBase-root MuiCardActionArea-root.*$")
-            )  # //*[@id="app-layout"]/div[2]/div[1]/div[1]/div/div/div/div/a
-            if items:
-                break
-            # 待機して次のループ
-            time.sleep(self.retry_interval)  # FIXME: 可能であれば非同期処理にする
-            continue
+    def __get_from_now_section(self, now_section: WebElement) -> list[ChannelPlusLive]:
+        # TODO
+        return []
 
+    def __get_from_future_section(self, future_section: WebElement) -> list[ChannelPlusLive]:
+        """放送予定の生放送情報を取得する"""
+        # アイテムの取得  //*[@id="app-layout"]/div[2]/div[1]/div[1]/div/div/div/div/a
+        items = get_matching_all_elements(base=future_section, tag="a", attribute="class", pattern=r"^MuiButtonBase-root MuiCardActionArea-root.*$")
+        if not items:
+            return []
+
+        lives = []
         for item in items:
-            item: WebElement
-            live = {}
-            # 各種情報
-            live["channel_id"]: str = channel_id
-            live["status"]: str = "future"
-            live["title"]: str = item.find_element(By.XPATH, "div[2]/div[1]/h6").text
-            live["link"]: str = item.get_attribute("href")
-            live["id"]: str = live["link"].split("/")[-1]
-            # サムネイル
-            thumbnail: str = item.find_element(By.XPATH, "div").get_attribute("style")
-            live["thumbnail_link"]: str = re.search(r"https.*(\d+)", thumbnail).group()
-            # 開始予定時刻
-            scheduled_start_at: str = get_matching_element(
-                base_element=item, tag="span", attribute="class", pattern=re.compile(r"^.*MuiTypography-caption.*$")
-            ).text  # ex:'09/16 21:00', '今日 21:00' etc...
-            if "今日" in scheduled_start_at:  # 日付部分の補完
-                scheduled_start_at: str = scheduled_start_at.replace("今日", datetime.now().strftime("%m/%d"))
-            elif "明日" in scheduled_start_at:
-                scheduled_start_at: str = scheduled_start_at.replace("明日", (datetime.now() + timedelta(days=1)).strftime("%m/%d"))
-            scheduled_start_at: datetime = datetime.strptime(scheduled_start_at, "%m/%d %H:%M")  # datetime型に変換
-            scheduled_start_at: datetime = set_year(scheduled_start_at)  # 年部分を補完
-            live["scheduled_start_at"]: str = scheduled_start_at.isoformat()
-            # リストに追加する
+            live = self.__future_item(item)
             lives.append(live)
 
         return lives
 
-    # トップページの動画を取得するメソッド
-    def top_video(self, channel_id: str, type: str = "upload") -> list[dict]:
-        """ニコニコチャンネルプラスの動画ページをスクレイピングする"""
-        videos = []
+    def __future_item(self, item: WebElement) -> ChannelPlusLive:
+        # チャンネルID
+        # TODO
+        # タイトル
+        title: str = item.find_element(By.XPATH, "div[2]/div[1]/h6").text
+        # 状態
+        status: str = "future"
+        # リンク
+        url: str = item.get_attribute("href")
+        # ID
+        id: str = url.split("/")[-1]
+        # サムネイル
+        thumbnail: str = item.find_element(By.XPATH, "div").get_attribute("style")
+        thumbnail: str = re.search(r"https.*(\d+)", thumbnail).group()
+        # 開始予定時刻 ex:'09/16 21:00', '今日 21:00' etc...
+        start_at: WebElement = get_matching_element(base=item, tag="span", attribute="class", pattern=r"^.*MuiTypography-caption.*$")
+        start_at: str = start_at.text
+        try:
+            start_at: datetime = datetime.strptime(start_at, "%m/%d %H:%M")
+        except:  # FIXME: 例外処理をちゃんとする
+            time_ = start_at[-5:]  # 後ろの時間部分を取得
+            hour, minute = time_.split(":")  # 時間部分を取得
+            if "今日" in start_at:
+                now: datetime = datetime.now()
+                start_at: datetime = now.replace(hour=int(hour), minute=int(minute))
+            elif "明日" in start_at:
+                tommorow: datetime = datetime.now() + timedelta(days=1)
+                start_at: datetime = tommorow.replace(hour=int(hour), minute=int(minute))
 
+        # TODO
+
+    # トップページの動画を取得する
+    def get_video(self, type_: str = "upload") -> list[ChannelPlusVideo]:
+        videos = self.__video_page(type_)
+        return videos
+
+    def __video_page(self, type_: str) -> list[ChannelPlusVideo]:
+        """ニコニコチャンネルプラスの動画ページをスクレイピングする"""
         # 動画ページを開く
-        self.driver.get(f"https://nicochannel.jp/{channel_id}/videos")
+        self.driver.get(f"https://nicochannel.jp/{self.id}/videos")
 
         # 指定されたタイプのボタンをクリックして遷移
-        try:
-            if type == "upload":
-                self.wait.until(EC.element_to_be_clickable((By.XPATH, '//span[text()="アップロード動画"]/..'))).click()
-            elif type == "archive":
-                self.wait.until(EC.element_to_be_clickable((By.XPATH, '//span[text()="アーカイブ動画"]/..'))).click()
-            elif type == "all":
-                pass
-            else:
-                raise ValueError("type must be 'upload' or 'archive' or 'all'")
-        # 要素が見つからなかった場合エラーを投げる
-        except TimeoutException:
-            if self.driver.find_element(By.XPATH, self.not_found_xpath):
-                raise ValueError(f"maybe channel_id is wrong (ID:{channel_id})")
-            else:
-                raise ValueError(f"unknown error (URL:{self.driver.current_url})")
+        if type_ == "upload":
+            uploaded_btn = self.wait.until(EC.element_to_be_clickable((By.XPATH, '//span[text()="アップロード動画"]/..')))
+            uploaded_btn.click()
+        elif type_ == "archive":
+            archive_btn = self.wait.until(EC.element_to_be_clickable((By.XPATH, '//span[text()="アーカイブ動画"]/..')))
+            archive_btn.click()
+        elif type_ == "all":
+            pass
+        else:
+            raise ValueError("type must be 'upload' or 'archive' or 'all'")
+
+        # 一番下にたどり着くまでスクロール
+        while True:
+            # 現在のスクロール位置を取得
+            current_position: int = self.driver.execute_script("return window.pageYOffset")
+            # スクロール
+            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            # スクロールが終わるまで待機
+            self.wait.until(EC.presence_of_element_located((By.XPATH, f"{footer_xpath}")))
+            # 現在のスクロール位置を取得
+            new_position: int = self.driver.execute_script("return window.pageYOffset")
+            # スクロールが終わったらループを抜ける
+            if current_position == new_position:
+                break
 
         # アイテムを取得
-        items = []
-        for _ in range(30):
-            main: WebElement = self.driver.find_element(By.XPATH, '//div[@id="root"]/div/div[2]/div[1]')
-            items: list = get_matching_all_elements(base_element=main, tag="div", attribute="class", pattern=re.compile(r"^.*MuiGrid-item.*$"))
-            # アイテムが取得できたらループを抜ける
-            if items:
-                break
-            time.sleep(self.retry_interval)  # FIXME: 可能であれば非同期処理にする
+        main: WebElement = self.driver.find_element(By.XPATH, '//div[@id="root"]/div/div[2]/div[1]')
+        items: list = get_matching_all_elements(base=main, tag="div", attribute="class", pattern=r"^.*MuiGrid-item.*$")
+        if not items:
+            return []
 
         # 各アイテムから動画情報を取得
+        videos = []
         for item in items:
-            video = {}
-            item_upper: WebElement = item.find_element(By.XPATH, "./div/div/div[1]")
-            item_under: WebElement = item.find_element(By.XPATH, "./div/div/div[2]")
-            # 各種情報を取得
-            video["channel_id"]: str = channel_id
-            video["title"]: str = item_under.find_element(By.XPATH, ".//h6").text
-            video["link"]: str = item_under.find_element(By.XPATH, ".//a").get_attribute("href")
-            video["id"]: str = video["link"].split("/")[-1]
-            video["thumbnail_link"]: str = item_upper.find_element(By.XPATH, ".//img").get_attribute("src")
-            uploaded_at: str = item_under.find_element(By.XPATH, ".//span").text  # ex:"2023/07/06", "〇日前"
-            if "日前" in uploaded_at:  # 日付部分の補完
-                before_days: int = int(uploaded_at[0])
-                uploaded_at: str = (datetime.now() - timedelta(days=before_days)).strftime("%Y/%m/%d")
-            video["uploaded_at"]: str = datetime.strptime(uploaded_at, "%Y/%m/%d").isoformat()
-            length: str = item_upper.find_element(By.XPATH, "./div[2]").text  # 00:00:00
-            length: timedelta = self.__parse_video_duration(length)
-            video["length"]: int = int(timedelta.total_seconds(length))  # 秒数に変換
-            video["view_count"]: int = int(item_under.find_element(By.XPATH, "./div/div/div[1]/div").text)
-            video["comment_count"]: int = int(item_under.find_element(By.XPATH, "./div/div/div[2]/div").text)
-            # リストに追加する
+            video = self.__video_item(item)
             videos.append(video)
 
         return videos
 
-    # 動画時間文字列を時間、分、秒に分割する関数
-    def __parse_video_duration(duration_str: str) -> timedelta:
-        """動画時間文字列を時間、分、秒に分割する
+    def __video_item(self, item: WebElement) -> ChannelPlusVideo:
+        item_upper: WebElement = item.find_element(By.XPATH, "./div/div/div[1]")
+        item_under: WebElement = item.find_element(By.XPATH, "./div/div/div[2]")
+        # 投稿者ID
+        # TODO
+        # タイトル
+        title: str = item_under.find_element(By.XPATH, ".//h6").text
+        # リンク
+        url: str = item_under.find_element(By.XPATH, ".//a").get_attribute("href")
+        # ID
+        id: str = url.split("/")[-1]
+        # サムネイル
+        thumbnail: str = item_upper.find_element(By.XPATH, ".//img").get_attribute("src")
+        # 投稿日時
+        posted_at: str = item_under.find_element(By.XPATH, ".//span").text  # ex:"2023/07/06", "〇日前"
+        try:
+            posted_at: datetime = datetime.strptime(posted_at, "%Y/%m/%d")
+        except:  # FIXME: 例外処理をちゃんとする
+            before_days: int = int(posted_at[0])
+            posted_at: datetime = datetime.now() - timedelta(days=before_days)
+        # 動画時間
+        length: str = item_upper.find_element(By.XPATH, "./div[2]").text  # 00:00:00
+        length: timedelta = parse_video_duration(length)
+        # 再生数
+        view_count: WebElement = item_under.find_element(By.XPATH, "./div/div/div[1]/div")
+        view_count: int = int(view_count.text)
+        # コメント数
+        comment_count: WebElement = item_under.find_element(By.XPATH, "./div/div/div[2]/div")
+        comment_count: int = int(comment_count.text)
 
-        '00:00:00'もしくは'00:00'のような形式で引数を渡す
-        """
-        # 時間、分、秒の要素を取得
-        parts: list = duration_str.split(":")
-        if len(parts) == 3:
-            seconds: int = int(parts[-1])
-            minutes: int = int(parts[-2])
-            hours: int = int(parts[-3])
-        elif len(parts) == 2:
-            seconds: int = int(parts[-1])
-            minutes: int = int(parts[-2])
-            hours: int = 0
-        else:
-            raise ValueError(f"invalid duration_str (duration_str:{duration_str})")
+        # TODO
 
-        # timedelta オブジェクトを作成
-        video_duration = timedelta(hours=hours, minutes=minutes, seconds=seconds)
-
-        return video_duration
-
-    # トップページのニュースを取得するメソッド
-    def top_news(self, channel_id: str, full_info: bool = False) -> list[dict]:
-        """ニコニコチャンネルプラスのニュースページをスクレイピングする
-
-        full_infoがTrueの場合はニュースの詳細情報も取得する
-        """
-        # トップページのニュースを取得
-        newses = self._top_news_page(channel_id)
-
-        # full_infoがTrueの場合はニュースの詳細情報も取得する
-        if full_info:
-            for number, top_news in enumerate(newses):
-                # 新しいタブを開く
-                current_tab = self.driver.current_window_handle
-                self.driver.switch_to.new_window("tab")
-                # 新しいタブに遷移するまで待機
-                while current_tab == self.driver.current_window_handle:
-                    time.sleep(self.retry_interval)  # FIXME: 可能であれば非同期処理にする
-                # ページを開いてIDを取得
-                self.driver.get(f"https://nicochannel.jp/{channel_id}/articles/news")
-                self.wait.until(EC.element_to_be_clickable((By.XPATH, f'//h6[text()="{top_news["title"]}"]'))).click()
-                news_id = self.driver.current_url.split("/")[-1]
-                detail_news: dict = self._news_page(channel_id, news_id)
-                # 辞書を1つに統合
-                newses[number] = top_news | detail_news
-                # タブを閉じて元のタブに戻る
-                self.driver.close()
-                self.driver.switch_to.window(current_tab)
-                # 1秒待機
-                time.sleep(1)  # FIXME: 可能であれば非同期処理にする
-
+    # トップページのニュースを取得する
+    def get_news(self, limit: int = 0) -> list[ChannelPlusNews]:
+        newses = self.__news_page(limit=limit)
         return newses
 
-    def _top_news_page(self, channel_id: str) -> list[dict]:
-        newses = []
-        item: WebElement
-
+    def __news_page(self, limit) -> list[ChannelPlusNews]:
         # ニュースページを開く
-        self.driver.get(f"https://nicochannel.jp/{channel_id}/articles/news")
+        self.driver.get(f"https://nicochannel.jp/{self.id}/articles/news")
 
-        # メインの要素が取得
-        try:
-            main = self.wait.until(EC.presence_of_element_located((By.XPATH, self.main_xpath)))
-        # 要素が見つからなかった場合エラーを投げる
-        except TimeoutException:
-            if self.driver.find_element(By.XPATH, self.not_found_xpath):
-                raise ValueError(f"maybe channel_id is wrong (ID:{channel_id})")
-            else:
-                raise ValueError(f"unknown error (URL:{self.driver.current_url})")
+        # 一番下にたどり着くまでスクロール
+        while True:
+            # 現在のスクロール位置を取得
+            current_position: int = self.driver.execute_script("return window.pageYOffset")
+            # スクロール
+            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            # スクロールが終わるまで待機
+            self.wait.until(EC.presence_of_element_located((By.XPATH, f"{footer_xpath}")))
+            # 現在のスクロール位置を取得
+            new_position: int = self.driver.execute_script("return window.pageYOffset")
+            # スクロールが終わったらループを抜ける
+            if current_position == new_position:
+                break
+
+        # メインの要素を取得 FIXME
+        main = self.wait.until(EC.presence_of_element_located((By.XPATH, self.main_xpath)))
 
         # アイテムを取得
-        for _ in range(self.retry_count):
-            items = get_matching_all_elements(base_element=main, tag="div", attribute="class", pattern=re.compile(r"^.*MuiPaper-rounded.*$"))
-            if items:
-                break
-            time.sleep(self.retry_interval)  # FIXME: 可能であれば非同期処理にする
-        # アイテムがない場合は空のリストを返す
-        else:
-            logger.debug(f"can't get items. maybe no news or error occurred.")  # FIXME
+        items = get_matching_all_elements(base=main, tag="div", attribute="class", pattern=r"^.*MuiPaper-rounded.*$")
+        if not items:
             return []
 
-        # FIXME: 各ニュースから情報を取得
+        # 各ニュースから情報を取得
+        newses = []
         for item in items:
-            news = {}
-            for _ in range(self.retry_count):
-                # 情報を取得する
-                try:
-                    news["channel_id"]: str = channel_id
-                    news["title"]: str = item.find_element(By.XPATH, ".//h6").text
-                    news["thumbnail_link"]: str = item.find_element(By.XPATH, ".//img").get_attribute("src")
-                    published_at: str = item.find_element(By.XPATH, "./div[2]/div[3]/div").text  # ex:"2023/07/06","2日前"
-                    try:
-                        news["published_at"]: str = datetime.strptime(published_at, "%Y/%m/%d").isoformat()
-                    except ValueError:
-                        before_days: int = int(published_at[0])
-                        news["published_at"]: str = (datetime.now() - timedelta(days=before_days)).isoformat()
-                # 要素が見つからなかった時
-                except NoSuchElementException:
-                    time.sleep(self.retry_interval)
-                # 成功時
-                else:
-                    newses.append(news)
-                    break
-            else:
-                raise ValueError(f"can't get news info (URL:{self.driver.current_url})")
+            news = self.__news_item(item)
+            newses.append(news)
 
+        # 結果を返す
         return newses
 
-    # 生放送か動画の詳細情報を取得するメソッド
-    def content(self, channel_id: str, content_id: str) -> dict:
-        """生放送と動画の詳細情報を取得する"""
-
-        content = self._content_page(channel_id, content_id)
-
-        return content
-
-    # 複数の生放送か動画の詳細情報を取得するメソッド
-    def contents(self, channel_id: str, content_ids: list[str]) -> list[dict]:
-        """生放送と動画の詳細情報を取得する"""
-
-        contents = []
-        for content_id in content_ids:
-            content = self._content_page(channel_id, content_id)
-            contents.append(content)
-
-        return contents
-
-    def _content_page(self, channel_id: str, content_id: str) -> dict:
-        """生放送、動画ページをスクレイピングする"""
-        content = {}
-
-        # コンテンツのページを開く
-        self.driver.get(f"https://nicochannel.jp/{channel_id}/live/{content_id}")
-
-        # メインの要素を取得
+    def __news_item(self, item: WebElement) -> ChannelPlusNews:
+        # 投稿者ID
+        # TODO
+        # タイトル
+        title: str = item.find_element(By.XPATH, ".//h6").text
+        # サムネイル
+        thumbnail: str = item.find_element(By.XPATH, ".//img").get_attribute("src")
+        # 投稿日時
+        posted_at: str = item.find_element(By.XPATH, "./div[2]/div[3]/div").text  # ex:"2023/07/06","〇日前","〇時間前"
         try:
-            self.wait.until(EC.presence_of_element_located((By.XPATH, self.main_xpath)))
-        except TimeoutException:
-            if self.driver.find_element(By.XPATH, self.not_found_xpath):
-                raise ValueError(f"maybe channel_id is wrong (ID:{channel_id})")
+            posted_at: datetime = datetime.strptime(posted_at, "%Y/%m/%d")
+        except:  # FIXME: 例外処理をちゃんとする
+            if "日前" in posted_at:
+                before_days: int = int(posted_at[0])
+                posted_at: datetime = datetime.now() - timedelta(days=before_days)
+            elif "時間前" in posted_at:
+                before_hours: int = int(posted_at[0])
+                posted_at: datetime = datetime.now() - timedelta(hours=before_hours)
 
-        # コンテンツ情報を取得
-        try:
-            # 各種情報
-            content["link"]: str = self.driver.current_url
-            content["id"]: str = content["link"].split("/")[-1]
-            content["channel_id"]: str = content["link"].split("/")[-3]
-            content["title"]: str = self.wait.until(
-                EC.presence_of_element_located((By.XPATH, '/html/head/meta[@property="og:title"]'))
-            ).get_attribute("content")
-            content["thumbnail_link"]: str = self.wait.until(
-                EC.presence_of_element_located((By.XPATH, '/html/head/meta[@property="og:image"]'))
-            ).get_attribute("content")
-            content["description"]: str = self.wait.until(
-                EC.presence_of_element_located((By.XPATH, '/html/head/meta[@name="description"]'))
-            ).get_attribute("content")
-            # 放送予定、放送中の判定
-            self.wait.until(EC.presence_of_element_located((By.XPATH, '//div[@id="video-page-wrapper"]')))
-            labels: list = self.driver.find_elements(By.XPATH, '//span[@class="MuiChip-label MuiChip-labelSmall"]')
-            for label in labels:
-                # 放送予定
-                if label.text == "COMING SOON":
-                    content["type"]: str = "live"
-                    content["status"]: str = "future"
-                    break
-                # 放送中
-                elif label.text == "ON AIR":  # FIXME:てきとう
-                    content["type"]: str = "live"
-                    content["status"]: str = "now"
-                    break
-
-        # 要素が見つからなかった場合エラーを投げる
-        except TimeoutException:
-            if self.driver.find_element(By.XPATH, self.not_found_xpath2):
-                raise ValueError(f"maybe content_id is wrong (channel_id:{channel_id}, content_id:{content_id})")
-            else:
-                raise ValueError(f"unknown error (ID:{channel_id}, content_id:{content_id})")
-
-        return content
-
-    # ニュースの詳細情報を取得するメソッド
-    def news(self, channel_id: str, news_id: str = None) -> dict:
-        """ニュースの詳細情報をスクレイピングで取得する"""
-        news = {}
-
-        # ニュースページから情報を取得
-        news = self._news_page(channel_id, news_id)
-
-        # トップページから情報を取得
-        top_newses = self.top_news(channel_id)
-
-        # トップページのニュースの中からタイトルが一致するものを見つけ合成
-        for top_news in top_newses:
-            if top_news["title"] == news["title"]:
-                news = top_news | news
-                break
-
-        return news
-
-    def _news_page(self, channel_id: str, news_id: str = None) -> dict:
-        """news()の内部で使うニュースページの情報を取得するメソッド"""
-        news = {}
-
-        # ニュースページを開く
-        self.driver.get(f"https://nicochannel.jp/{channel_id}/articles/news/{news_id}")
-
-        # メインの要素を取得出来ない場合はエラーを投げる
-        try:
-            self.wait.until(EC.presence_of_element_located((By.XPATH, self.main_xpath)))
-        except TimeoutException:
-            if self.driver.find_element(By.XPATH, self.not_found_xpath):
-                raise ValueError(f"maybe channel_id is wrong (URL:{self.driver.current_url})")
-            else:
-                raise ValueError(f"unknown error (URL:{self.driver.current_url})")
-
-        # 各種情報を取得
-        try:
-            news["link"]: str = self.driver.current_url
-            news["title"]: str = self.driver.title
-            news["id"]: str = news["link"].split("/")[-1]
-            news["channel_id"]: str = news["link"].split("/")[-4]
-            published_at: str = self.wait.until(
-                EC.presence_of_element_located((By.XPATH, f"{self.main_xpath}/div[2]/div[4]/span"))
-            ).text  # ex:"2022/02/10" or "2日前"
-            try:
-                news["published_at"]: str = datetime.strptime(published_at, "%Y/%m/%d").isoformat()
-            except ValueError:
-                before_days: int = int(published_at[0])
-                news["published_at"]: str = (datetime.now() - timedelta(days=before_days)).isoformat()
-            news["text"]: str = self.wait.until(EC.presence_of_element_located((By.XPATH, f"{self.main_xpath}/div[2]/div[5]"))).text
-        except TimeoutException:
-            if self.driver.find_element(By.XPATH, self.not_found_xpath2):
-                raise ValueError(f"maybe news_id is wrong (URL:{self.driver.current_url})")
-
-        return news
+        # ニュースページを開いて詳細情報を取得 TODO
 
 
-class Video(Video):
-    pass
+class ChannelPlusVideo(Video):
+    """ニコニコチャンネルプラスの動画情報を格納するクラス"""
+
+    def __init__(self, poster_id: str, id: str) -> None:
+        super().__init__(id)
+        self.poster_id = poster_id
+
+    @classmethod
+    def from_id(cls, id: str) -> ChannelPlusVideo:
+        video = cls(id)
+        video.get_detail()
+        return video
+
+    def get_detail(self) -> None:
+        # コンテンツページを開いて詳細情報を取得
+        video = __content_page(self, self.driver, self.poster_id, self.id)
+        # 詳細情報を格納
+        self.title = video["title"]
+        self.url = video["url"]
+        self.id = video["id"]
+        self.poster_id = video["poster_id"]
+        self.thumbnail = video["thumbnail"]
+        self.description = video["description"]
+
+        return None
 
 
-class Live(Live):
-    pass
+class ChannelPlusLive(Live):
+    """ニコニコチャンネルプラスの生放送情報を格納するクラス"""
+
+    def __init__(self, poster_id: str, id: str) -> None:
+        super().__init__(id)
+        self.poster_id = poster_id
+
+    @classmethod
+    def from_id(cls, id: str) -> ChannelPlusVideo:
+        live = cls(id)
+        live.get_detail()
+        return live
+
+    def get_detail(self) -> None:
+        # コンテンツページを開いて詳細情報を取得
+        live = __content_page(self, self.driver, self.poster_id, self.id)
+        # 詳細情報を格納
+        self.title = live["title"]
+        self.url = live["url"]
+        self.id = live["id"]
+        self.poster_id = live["poster_id"]
+        self.thumbnail = live["thumbnail"]
+        self.description = live["description"]
+
+        return None
 
 
-class News(News):
-    pass
+class ChannelPlusNews(News):
+    """ニコニコチャンネルプラスのニュース情報を格納するクラス"""
+
+    def __init__(self, poster_id: str, id: str) -> None:
+        super().__init__(id)
+        self.poster_id = poster_id
+
+
+# ニコニコチャンネルプラスのコンテンツページをスクレイピングする
+def __content_page(self, driver: webdriver.Chrome, poster_id: str, id: str) -> dict:
+    """ニコニコチャンネルプラスのコンテンツページをスクレイピングする"""
+    # コンテンツのページを開く
+    driver.get(f"https://nicochannel.jp/{poster_id}/live/{id}")
+
+    # メインの要素を取得 FIXME
+    main: WebElement = self.wait.until(EC.presence_of_element_located((By.XPATH, self.main_xpath)))
+
+    # タイトル
+    title: str = main.find_element(By.XPATH, '/html/head/meta[@property="og:title"]').get_attribute("content")
+    # URL FIXME
+    url: str = driver.current_url
+    # ID
+    id: str = url.split("/")[-1]
+    # 投稿者ID
+    poster_id: str = url.split("/")[-3]
+    # サムネイル
+    thumbnail: str = main.find_element(By.XPATH, '/html/head/meta[@property="og:image"]').get_attribute("content")
+    # 説明文
+    description: str = main.find_element(By.XPATH, '/html/head/meta[@name="description"]').get_attribute("content")
+
+    # ラベルからコンテンツの種類と状態を取得
+    WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, '//div[@id="video-page-wrapper"]')))
+    labels: list = main.find_elements(By.XPATH, '//span[@class="MuiChip-label MuiChip-labelSmall"]')
+    for label in labels:
+        # TODO
+        pass
+
+    result = {
+        "title": title,
+        "url": url,
+        "id": id,
+        "poster_id": poster_id,
+        "thumbnail": thumbnail,
+        "description": description,
+    }
+
+    return result
