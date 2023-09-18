@@ -33,6 +33,13 @@ NEWS_ID_PATTERN = "^ar\d+$"
 class NicoNicoChannel(Platform):
     """ニコニコチャンネルのコンテンツを取得するクラス"""
 
+    def __init__(self, id: str) -> None:
+        """チャンネルIDを指定する
+
+        名前でもおそらく動くが動作は保証できない"""
+        check_channel_id(id)
+        super().__init__(id)
+
     # トップページの全てのコンテンツを取得する
     def get_all(self, limit_live: int = 10, limit_video: int = 20, limit_news: int = 5) -> tuple[list[NicoNicoLive], list[NicoNicoVideo], list[NicoNicoChannel.News]]:
         """ニコニコチャンネルに含まれる全てのコンテンツを取得する"""
@@ -354,6 +361,9 @@ class NicoNicoChannel(Platform):
         """ニュースの情報を管理するクラス"""
 
         def __init__(self, poster_id: str, id: str) -> None:
+            """他のコンテンツと違い、ニュースはIDと投稿者IDが必要"""
+            check_channel_id(poster_id)
+            check_news_id(id)
             super().__init__(id)
             self.poster_id = poster_id
 
@@ -421,6 +431,7 @@ class NicoNicoLive(Live):
     @classmethod
     def from_id(cls, id: str) -> NicoNicoLive:
         """IDから生放送情報を取得する"""
+        check_live_id(id)
         live = cls(id)
         live.get_detail()
         return live
@@ -530,6 +541,7 @@ class NicoNicoVideo(Video):
     @classmethod
     def from_id(cls, id: str) -> NicoNicoVideo:
         """IDから動画情報を取得する"""
+        check_video_id(id)
         video = cls(id)
         video.get_detail()
         return video
