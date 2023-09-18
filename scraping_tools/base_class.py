@@ -61,7 +61,7 @@ class Platform(ScrapingMixin):
         self.id = id
 
 
-class Content(object):
+class Content(ScrapingMixin):
     """コンテンツの基底クラス"""
 
     id: str
@@ -143,7 +143,7 @@ class Content(object):
         return result
 
 
-class Video(Content, ScrapingMixin):
+class Video(Content):
     description: str
     duration: timedelta
     view_count: int
@@ -231,7 +231,7 @@ class Video(Content, ScrapingMixin):
         self.comment_count = comment_count if comment_count is not None else self.comment_count
 
 
-class Live(Video, ScrapingMixin):
+class Live(Video):
     start_at: datetime
     end_at: datetime
     status: str
@@ -333,7 +333,7 @@ class Live(Video, ScrapingMixin):
         self.archive_enabled_at = archive_enabled_at if archive_enabled_at is not None else self.archive_enabled_at
 
 
-class News(Content, ScrapingMixin):
+class News(Content):
     body: str
 
     def __init__(self, id: str) -> None:
