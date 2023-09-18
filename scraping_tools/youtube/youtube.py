@@ -11,7 +11,7 @@ from googleapiclient.discovery import build
 import isodate
 
 from my_utilities.debug import execute_time
-from .base_class import Platform, Live, Video
+from ..base_class import Platform, Live, Video
 
 
 logger = logging.getLogger(__name__)
