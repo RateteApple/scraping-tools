@@ -1,6 +1,7 @@
 .vscode/
 debug.py
 res/
+sample/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
