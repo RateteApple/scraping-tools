@@ -6,8 +6,21 @@ from .channelplus import ChannelPlusChannel
 from .channelplus import ChannelPlusLive
 from .channelplus import ChannelPlusVideo
 
-from .youtube import YouTubeChannel
-from .youtube import YouTubeLive
-from .youtube import YouTubeVideo
+from .youtube import YTChannel
+from .youtube import YTLive
+from .youtube import YTVideo
 
-from .base_class import ScrapingClass, Platform, Content, Live, Video, News
+from .base_class import ScrapingMixin, Platform, Content, Live, Video, News
+
+
+__all__ = [
+    "NicoNicoChannel",
+    "NicoNicoLive",
+    "NicoNicoVideo",
+    "ChannelPlusChannel",
+    "ChannelPlusLive",
+    "ChannelPlusVideo",
+    "YTChannel",
+    "YTLive",
+    "YTVideo",
+]
