@@ -3,151 +3,237 @@
 from __future__ import annotations
 import logging
 import json
+import feedparser
+import os
+from datetime import datetime, timedelta
 
 from googleapiclient.discovery import build
+import isodate
 
 from my_utilities.debug import execute_time
+from .base_class import Platform, Live, Video
 
 
 logger = logging.getLogger(__name__)
 
+THUMBNAIL_SIZES = ("maxres", "standard", "high", "medium", "default")
 
-@execute_time
-class YouTube:
+
+@execute_time()
+class YTChannel(Platform):
     """YouTubeAPIのヘルパークラス"""
 
-    thumbnail_sizes: list = ["maxres", "standard", "high", "medium", "default"]
-    output_api_data: bool = False
+    # APIクライアントを作成
+    client = build("youtube", "v3", developerKey=os.environ["YOUTUBE_API_KEY"])
 
-    # コンストラクタ
-    def __init__(self, API_KEY: str):
-        """コンストラクタ"""
-        # APIクライアントを作成
-        self.client = build("youtube", "v3", developerKey=API_KEY)
+    def __init__(self, id: str) -> None:
+        super().__init__(id)
 
-        return
-
-    # デストラクタ
-    def __del__(self):
-        """デストラクタ"""
+    def __del__(self) -> None:
         # APIクライアントを削除
         del self.client
 
-        return
-
-    # チャンネルのコンテンツを取得するメソッド
-    def top_content(self, channel_id: str, max: int = 10, order: str = "date") -> dict:
-        """チャンネルの動画と生放送を取得する
-
-        複数種類のAPIリクエストを投げることでコンテンツの詳細情報を取得している
-        """
-        contents: dict = {"live": [], "video": []}
-        contents["live"]: list = []
-        contents["video"]: list = []
-
-        # APIで情報を取得
-        items = self._api_request(channel_id, max, order)
-
-        # 情報を辞書にまとめる
-        for item in items:
-            content = {}
-            # 共通部分
-            content.update(self._get_common_part(item))
-            # 生放送かどうかで分岐
-            if "liveStreamingDetails" in item:
-                content["type"] = "live"
-                content.update(self._get_live_part(item))
-            else:
-                content["type"] = "video"
-            # 辞書に追加
-            contents[content["type"]].append(content)
+    def get_contents(self, requet_type: str = "api", limit: int = 5) -> list[dict]:
+        if requet_type == "api":
+            contents = self.__get_ids_from_api(limit)
+        elif requet_type == "feed":
+            contents = self.__get_ids_from_feed()
+        else:
+            raise ValueError(f"resquet_type must be 'api' or 'feed', not '{requet_type}'")
 
         return contents
 
-    # APIリクエスト
-    def _api_request(self, channel_id: str, max: int, order: str):
-        items: list = []
-        # search().listでchannel_id から検索する
-        search_channel = (
-            self.client.search().list(channelId=channel_id, part="snippet", maxResults=max, type="video", order=order, safeSearch="none").execute()
-        )
-        # デバッグ用の出力
-        if self.output_api_data:
-            with open("search_channel.json", "w", encoding="UTF-8") as f:
-                f.write(json.dumps(search_channel, indent=4, ensure_ascii=False))
+    def __get_ids_from_api(self, limit: int) -> list[dict]:
+        """チャンネルのコンテンツを取得するメソッド"""
+        # APIで情報を取得
+        res = self.client.search().list(channelId=self.id, part="snippet", maxResults=limit, type="video", order="date", safeSearch="none").execute()
 
-        # リクエスト数を減らすために video_ids を作成
-        video_ids = [item["id"]["videoId"] for item in search_channel["items"]]
+        # IDとetagを取得
+        contents = []
+        for item in res["items"]:
+            content = {"id": item["id"]["videoId"], "etag": item["etag"]}
+            contents.append(content)
 
-        # videos().listでvideo_idsから検索する
-        snippet: dict = self.client.videos().list(id=",".join(video_ids), part="snippet").execute()
-        statistics: dict = self.client.videos().list(id=",".join(video_ids), part="statistics").execute()
-        live_streaming_details: dict = self.client.videos().list(id=",".join(video_ids), part="liveStreamingDetails").execute()
-        # デバッグ用の出力
-        if self.output_api_data:
-            with open("snippet_res.json", "w", encoding="UTF-8") as f:
-                f.write(json.dumps(snippet, indent=4, ensure_ascii=False))
-            with open("statistics_res.json", "w", encoding="UTF-8") as f:
-                f.write(json.dumps(statistics, indent=4, ensure_ascii=False))
-            with open("liveStreamingDetails_res.json", "w", encoding="UTF-8") as f:
-                f.write(json.dumps(live_streaming_details, indent=4, ensure_ascii=False))
+        return contents
 
-        # レスポンスをまとめる
-        for snippet_item, statistics_item, live_streaming_details_item in zip(snippet["items"], statistics["items"], live_streaming_details["items"]):
-            item = {}
-            item.update(snippet_item)
-            item.update(statistics_item)
-            item.update(live_streaming_details_item)
+    def __get_ids_from_feed(self) -> list[dict]:
+        """チャンネルのコンテンツを取得するメソッド
+
+        15件までしか取得できない"""
+        # feedを取得
+        feed = feedparser.parse(f"https://www.youtube.com/feeds/videos.xml?channel_id={self.id}")
+
+        # ステータスコードが200以外なら例外を発生させる
+        if feed["status"] != 200 or feed["bozo"] != False:
+            raise  # TODO: 例外を作成する
+
+        # 情報を辞書にまとめる
+        contents = []
+        for item in feed["entries"]:
+            content = {"id": item["yt_videoid"]}
+            contents.append(content)
+
+        return contents
+
+    def get_detail(self, ids: list) -> list:
+        """コンテンツの詳細を取得するメソッド"""
+        # APIで情報を取得
+        snippet: dict = self.client.videos().list(id=",".join(ids), part="snippet").execute()
+        statistics: dict = self.client.videos().list(id=",".join(ids), part="statistics").execute()
+        streaming_details: dict = self.client.videos().list(id=",".join(ids), part="liveStreamingDetails").execute()
+        content_details: dict = self.client.videos().list(id=",".join(ids), part="contentDetails").execute()
+
+        # # デバッグ用の出力
+        # with open("snippet.json", "w", encoding="UTF-8") as f:
+        #     f.write(json.dumps(snippet, indent=4, ensure_ascii=False))
+        # with open("statistics.json", "w", encoding="UTF-8") as f:
+        #     f.write(json.dumps(statistics, indent=4, ensure_ascii=False))
+        # with open("streaming_details.json", "w", encoding="UTF-8") as f:
+        #     f.write(json.dumps(streaming_details, indent=4, ensure_ascii=False))
+        # with open("content_details.json", "w", encoding="UTF-8") as f:
+        #     f.write(json.dumps(content_details, indent=4, ensure_ascii=False))
+
+        # 取得したアイテムを結合
+        items = []
+        for sni, sta, stre, con in zip(snippet["items"], statistics["items"], streaming_details["items"], content_details["items"]):
+            item = {**sni, **sta, **stre, **con}
             items.append(item)
-        # デバッグ用の出力
-        if self.output_api_data:
-            with open("items.json", "w", encoding="UTF-8") as f:
-                f.write(json.dumps(items, indent=4, ensure_ascii=False))
 
-        # 結果を返す
-        return items
+        # # デバッグ用の出力 FIXME
+        # with open("items.json", "w", encoding="UTF-8") as f:
+        #     f.write(json.dumps(items, indent=4, ensure_ascii=False))
 
-    # アイテムの共通部分
-    def _get_common_part(self, item):
-        content = {}
-        content["id"] = item["id"]
-        content["channel_id"] = item["snippet"]["channelId"]
-        content["channel_title"] = item["snippet"]["channelTitle"]
-        if "tags" in item["snippet"]:
-            content["tags"] = item["snippet"]["tags"]
-        else:
-            content["tags"] = []
-        content["title"] = item["snippet"]["title"]
-        content["link"] = "https://www.youtube.com/watch?v=" + item["id"]
-        content["description"] = item["snippet"]["description"]
-        content["published_at"] = item["snippet"]["publishedAt"]
-        # 最初に見つかったサイズのサムネイルを取得する
-        for size in self.thumbnail_sizes:
+        # 情報を取得
+        contents = []
+        for item in items:
+            content = self.__item_to_instance(item)
+            contents.append(content)
+
+        return contents
+
+    def __item_to_instance(self, item: dict) -> Video:
+        """アイテムをインスタンスに変換するメソッド"""
+        # ID
+        id = item["id"]
+        # 投稿日時
+        posted_at = datetime.fromisoformat(item["snippet"]["publishedAt"])
+        # 投稿者ID
+        poster_id = item["snippet"]["channelId"]
+        # タイトル
+        title = item["snippet"]["title"]
+        # 説明文
+        description = item["snippet"]["description"]
+        # サムネイル
+        for size in THUMBNAIL_SIZES:
             if size in item["snippet"]["thumbnails"]:
-                content["thumbnail_link"] = item["snippet"]["thumbnails"][size]["url"]
+                thumbnail = item["snippet"]["thumbnails"][size]["url"]
                 break
-        content["view_count"] = int(item["statistics"]["viewCount"])
-        content["comment_count"] = int(item["statistics"]["commentCount"])
-        content["like_count"] = int(item["statistics"]["likeCount"])
+        # 投稿者名
+        poster_name = item["snippet"]["channelTitle"]
+        # タグ
+        tags = item["snippet"]["tags"] if "tags" in item["snippet"] else []
+        # 視聴回数
+        view_count: int = int(item["statistics"]["viewCount"])
+        # 高評価数
+        like_count: int = int(item["statistics"]["likeCount"])
+        # コメント数
+        comment_count: int = int(item["statistics"]["commentCount"])
+        # URL
+        url = f"https://www.youtube.com/watch?v={id}"
 
-        return content
+        # 生放送
+        if "liveStreamingDetails" in item:
+            instance = YTLive(id)
 
-    # 生放送の情報を取得するメソッド
-    def _get_live_part(self, item):
-        content = {}
-        # 予定開始時刻があれば取得
-        if item["liveStreamingDetails"]["scheduledStartTime"] is not None:
-            content["scheduled_start_at"] = item["liveStreamingDetails"]["scheduledStartTime"]
-        # 放送状況の取得
-        if item["snippet"]["liveBroadcastContent"] == "live":  # 配信中の動画
-            content["status"] = "now"
-            content["actual_start_at"] = item["liveStreamingDetails"]["actualStartTime"]
-            content["current_view_count"] = int(item["liveStreamingDetails"]["concurrentViewers"])
-        elif item["snippet"]["liveBroadcastContent"] == "upcoming":  # 配信予定の動画
-            content["status"] = "future"
-        elif item["snippet"]["liveBroadcastContent"] == "none":  # 終了済みの動画
-            content["status"] = "past"
-            content["actual_start_at"] = item["liveStreamingDetails"]["actualStartTime"]
-            content["actual_end_at"] = item["liveStreamingDetails"]["actualEndTime"]
+            # 放送中
+            if item["snippet"]["liveBroadcastContent"] == "live":
+                status = "now"
+                start_at = datetime.fromisoformat(item["liveStreamingDetails"]["actualStartTime"])
+                end_at = None
+                duration = None
+            # 放送予定
+            elif "scheduledStartTime" in item["liveStreamingDetails"]:
+                status = "future"
+                start_at = datetime.fromisoformat(item["liveStreamingDetails"]["scheduledStartTime"])
+                end_at = None
+                duration = None
+            # 放送済み
+            else:
+                status = "past"
+                start_at = datetime.fromisoformat(item["liveStreamingDetails"]["actualStartTime"])
+                end_at = datetime.fromisoformat(item["liveStreamingDetails"]["actualEndTime"])
+                duration: timedelta = isodate.parse_duration(item["contentDetails"]["duration"])
 
-        return content
+            # インスタンスに情報を追加
+            instance.set_value(
+                poster_id=poster_id,
+                poster_name=poster_name,
+                title=title,
+                url=url,
+                thumbnail=thumbnail,
+                posted_at=posted_at,
+                tags=tags,
+                is_deleted=False,  # FIXME
+                description=description,
+                duration=duration,
+                view_count=view_count,
+                like_count=like_count,
+                comment_count=comment_count,
+                start_at=start_at,
+                end_at=end_at,
+                status=status,
+            )
+
+        # 動画
+        else:
+            instance = YTVideo(id)
+            duration = isodate.parse_duration(item["contentDetails"]["duration"])
+            # インスタンスに情報を追加
+            instance.set_value(
+                poster_id=poster_id,
+                poster_name=poster_name,
+                title=title,
+                url=url,
+                thumbnail=thumbnail,
+                posted_at=posted_at,
+                tags=tags,
+                is_deleted=False,  # FIXME
+                description=description,
+                duration=duration,
+                view_count=view_count,
+                like_count=like_count,
+                comment_count=comment_count,
+            )
+
+        # インスタンスを返す
+        return instance
+
+
+@execute_time()
+class YTVideo(Video):
+    def __init__(self, id: str) -> None:
+        super().__init__(id)
+
+    def get_detail(self) -> None:
+        # TODO
+        pass
+
+    @classmethod
+    def from_id(self, id: str) -> None:
+        # TODO
+        pass
+
+
+@execute_time()
+class YTLive(Live):
+    def __init__(self, id: str) -> None:
+        super().__init__(id)
+
+    def get_detail(self) -> None:
+        # TODO
+        pass
+
+    @classmethod
+    def from_id(self, id: str) -> None:
+        # TODO
+        pass
