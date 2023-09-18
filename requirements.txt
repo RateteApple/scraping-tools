@@ -8,5 +8,8 @@ beautifulsoup4>=4.12
 # YoutubeAPI
 google-api-python-client>=2.98
 
+# data processing
+isodate==0.6.1
+
 # DEBUG
 my-utilities @ git+https://github.com/RateteApple/my-utilities.git
