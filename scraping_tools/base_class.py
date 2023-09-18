@@ -3,6 +3,7 @@
 from __future__ import annotations
 from datetime import datetime, timedelta
 import re
+import os
 from pprint import pformat
 from typing import Any
 import unicodedata
@@ -14,41 +15,11 @@ from selenium.webdriver.common.by import By
 from selenium.common.exceptions import StaleElementReferenceException
 
 
-class ScrapingClass(object):
-    is_headless: bool = True
-    timeout: int = 20
-
-    def __del__(self) -> None:
-        # ブラウザを閉じる
-        self.close_browser()
-
-    def __getattr__(self, name: str) -> None:
-        """ブラウザが開かれていない場合にブラウザを開く"""
-        if name == "driver":
-            self.open_browser()
-            return self.driver
-
-    def set_browser_settings(self, is_headless: bool = True, timeout: int = 20) -> None:
-        """ブラウザの設定を変更する
-
-        設定はクラス変数に保存されるため、インスタンス生成前にコールすること。"""
-
-        self.is_headless = is_headless
-        self.timeout = timeout
-
-    @classmethod
-    def set_browser_settings_all(cls, is_headless: bool = True, timeout: int = 20) -> None:
-        """全てのクラスのブラウザ設定を変更する
-
-        設定はクラス変数に保存されるため、インスタンス生成前にコールすること。"""
-
-        cls.is_headless = is_headless
-        cls.timeout = timeout
-
-    def open_browser(self, is_headless: bool = None, timeout: int = None) -> None:
+class ScrapingMixin(object):
+    def open_browser(self) -> None:
         """ブラウザを開く
 
-        オプションを指定しなかった場合はクラス変数の値を使用する
+        環境変数SCRAPING_TOOLS_HEADLESS_MODEがTrueの場合はヘッドレスモードで起動する。
         """
         options = webdriver.ChromeOptions()
         options.add_argument("--no-sandbox")  # 保護機能を無効化
@@ -58,16 +29,12 @@ class ScrapingClass(object):
         options.add_argument("--blink-settings=imagesEnabled=false")  # 画像を読み込まない
         options.add_argument("--disable-extensions")  # 拡張機能を無効化
 
-        if not is_headless:
-            is_headless = self.__class__.is_headless
-        if not timeout:
-            timeout = self.__class__.timeout
+        # FIXME
 
-        if is_headless:
+        if os.environ.get("SCRAPING_TOOLS_HEADLESS_MODE") == "True":
             options.add_argument("--headless")
 
         self.driver = webdriver.Chrome(options)
-        self.wait = WebDriverWait(self.driver, self.timeout)
 
         return self.driver
 
@@ -77,13 +44,24 @@ class ScrapingClass(object):
         if hasattr(self, "driver"):
             self.driver.quit()
 
+    def __getattr__(self, name: str) -> None:
+        """ブラウザが開かれていない場合にブラウザを開く"""
+        if name == "driver":
+            self.open_browser()
+            return self.driver
 
-class Platform(ScrapingClass):
+    def __del__(self) -> None:
+        # ブラウザを閉じる
+        self.close_browser()
+
+
+class Platform(ScrapingMixin):
     def __init__(self, id: str) -> None:
+        """チャンネルIDなどサイト毎の固有IDを設定する"""
         self.id = id
 
 
-class Content(ScrapingClass):
+class Content(object):
     """コンテンツの基底クラス"""
 
     id: str
@@ -99,39 +77,46 @@ class Content(ScrapingClass):
 
     def __init__(self, id: str) -> None:
         self.id: str = id
-        self.poster_id: str = ""
-        self.poster_name: str = ""
-        self.title: str = ""
-        self.url: str = ""
-        self.thumbnail: str = ""
+        self.poster_id: str = None
+        self.poster_name: str = None
+        self.title: str = None
+        self.url: str = None
+        self.thumbnail: str = None
         self.posted_at: datetime = None
         self.updated_at: datetime = None
         self.tags: list[str] = []
         self.is_deleted: bool = False
 
     def __str__(self) -> str:
-        return f"ID: {self.id}, Title: {self.title}, URL: {self.url}"
+        return f"「{self.title}」 URL:{self.url}"
 
     def __repr__(self) -> str:
-        # is_headlessとtimeoutを除外
-        result = {}
-        for key, value in vars(self).items():
-            if key in ["is_headless", "timeout"]:
-                continue
-            result[key] = value
+        values: dict = vars(self)
+        for key, value in values.items():
+            # datetimeは文字列に変換
+            if isinstance(value, datetime):
+                values[key] = value.isoformat()
+            # 長すぎる文字列は省略
+            elif isinstance(value, str) and len(value) > 120:
+                values[key] = value[:120] + "..."
+            # 長すぎるリストは省略
+            elif isinstance(value, list) and len(value) > 8:
+                values[key] = value[:8] + ["etc..."]
 
-        return pformat(result)
+        return pformat(values)
 
     def __setattr__(self, __name: str, __value: Any) -> None:
-        # datetime型
-        if __name == "posted_at" or __name == "updated_at":
-            if isinstance(__value, str) and __value:
-                __value = datetime.fromisoformat(__value)
-        # タイトル
-        elif __name == "title":
+        # 値がNoneの場合はパス
+        if __value is None:
+            return
+        # strは正規化
+        if isinstance(__value, str):
             __value = unicodedata.normalize("NFKC", __value)
 
         super().__setattr__(__name, __value)
+
+    def __eq__(self, other: Content) -> bool:
+        return self.id == other.id
 
     @classmethod
     def from_dict(cls, dict: dict) -> Content:
@@ -147,38 +132,18 @@ class Content(ScrapingClass):
 
     def to_dict(self) -> dict:
         result = {}
-        # 属性を取得
-        for key, value in vars(self).items():
-            # is_headlessとtimeoutは除外
-            if key in ["is_headless", "timeout"]:
-                continue
-            result[key] = value
+        # クラスの全ての属性名を取得
+        all_attributes = dir(self)
+
+        # Noneを含む属性を辞書に追加
+        for attr_name in all_attributes:
+            attr_value = getattr(self, attr_name)
+            result[attr_name] = attr_value
 
         return result
 
-    @staticmethod
-    def diff(base: object, target: object) -> dict:
-        """2つのインスタンスを比較して変更点を返す"""
-        # クラスが異なる場合はNotImplemented
-        if not base.__class__.__name__ == target.__class__.__name__:
-            return NotImplemented
 
-        # 変更点を取得
-        diffs = {}
-        for key, value in target.__dict__.items():
-            # str, int, float, bool, list, dict, tuple, None以外は除外
-            if not isinstance(value, (str, int, float, bool, list, dict, type(None))):
-                continue
-            # 変更点がある場合は追加
-            if base.__dict__[key] != value:
-                diff = {key: (base.__dict__[key], value)}
-                diffs.update(diff)
-
-        # 結果を返す
-        return diffs
-
-
-class Video(Content):
+class Video(Content, ScrapingMixin):
     description: str
     duration: timedelta
     view_count: int
@@ -187,21 +152,86 @@ class Video(Content):
 
     def __init__(self, id: str) -> None:
         super().__init__(id)
-        self.description = ""
-        self.duration = ""
-        self.view_count = 0
-        self.like_count = 0
-        self.comment_count = 0
+        self.description = None
+        self.duration = None
+        self.view_count = None
+        self.like_count = None
+        self.comment_count = None
 
-    def __setattr__(self, __name: str, __value: Any) -> None:
-        # description
-        if __name == "description":
-            __value = unicodedata.normalize("NFKC", __value)
+    def set_value(
+        self,
+        poster_id: str = None,
+        poster_name: str = None,
+        title: str = None,
+        url: str = None,
+        thumbnail: str = None,
+        posted_at: datetime = None,
+        updated_at: datetime = None,
+        tags: list[str] = None,
+        is_deleted: bool = None,
+        description: str = None,
+        duration: timedelta = None,
+        view_count: int = None,
+        like_count: int = None,
+        comment_count: int = None,
+    ) -> None:
+        """属性を設定する
 
-        super().__setattr__(__name, __value)
+        すべての属性を一度に設定することができる。
+        """
+        self.poster_id = poster_id
+        self.poster_name = poster_name
+        self.title = title
+        self.url = url
+        self.thumbnail = thumbnail
+        self.posted_at = posted_at
+        self.updated_at = updated_at
+        self.tags = tags
+        self.is_deleted = is_deleted
+        self.description = description
+        self.duration = duration
+        self.view_count = view_count
+        self.like_count = like_count
+        self.comment_count = comment_count
+
+    def update_value(
+        self,
+        poster_id: str = None,
+        poster_name: str = None,
+        title: str = None,
+        url: str = None,
+        thumbnail: str = None,
+        posted_at: datetime = None,
+        updated_at: datetime = None,
+        tags: list[str] = None,
+        is_deleted: bool = None,
+        description: str = None,
+        duration: timedelta = None,
+        view_count: int = None,
+        like_count: int = None,
+        comment_count: int = None,
+    ) -> None:
+        """属性を更新する
+
+        すべての属性を一度に更新することができる。
+        """
+        self.poster_id = poster_id if poster_id is not None else self.poster_id
+        self.poster_name = poster_name if poster_name is not None else self.poster_name
+        self.title = title if title is not None else self.title
+        self.url = url if url is not None else self.url
+        self.thumbnail = thumbnail if thumbnail is not None else self.thumbnail
+        self.posted_at = posted_at if posted_at is not None else self.posted_at
+        self.updated_at = updated_at if updated_at is not None else self.updated_at
+        self.tags = tags if tags is not None else self.tags
+        self.is_deleted = is_deleted if is_deleted is not None else self.is_deleted
+        self.description = description if description is not None else self.description
+        self.duration = duration if duration is not None else self.duration
+        self.view_count = view_count if view_count is not None else self.view_count
+        self.like_count = like_count if like_count is not None else self.like_count
+        self.comment_count = comment_count if comment_count is not None else self.comment_count
 
 
-class Live(Content):
+class Live(Video, ScrapingMixin):
     start_at: datetime
     end_at: datetime
     status: str
@@ -209,30 +239,159 @@ class Live(Content):
 
     def __init__(self, id: str) -> None:
         super().__init__(id)
-        self.start_at = ""
-        self.end_at = ""
-        self.status = ""
-        self.archive_enabled_at = ""
+        self.start_at = None
+        self.end_at = None
+        self.status = None
+        self.archive_enabled_at = None
 
-    def __setattr__(self, __name: str, __value: Any) -> None:
-        # datetime型
-        if __name == "start_at" or __name == "end_at" or __name == "archive_enabled_at":
-            if isinstance(__value, str) and __value:
-                __value = datetime.fromisoformat(__value)
+    def set_value(
+        self,
+        poster_id: str = None,
+        poster_name: str = None,
+        title: str = None,
+        url: str = None,
+        thumbnail: str = None,
+        posted_at: datetime = None,
+        updated_at: datetime = None,
+        tags: list[str] = None,
+        is_deleted: bool = None,
+        description: str = None,
+        duration: timedelta = None,
+        view_count: int = None,
+        like_count: int = None,
+        comment_count: int = None,
+        start_at: datetime = None,
+        end_at: datetime = None,
+        status: str = None,
+        archive_enabled_at: datetime = None,
+    ) -> None:
+        """属性を設定する
 
-        super().__setattr__(__name, __value)
+        すべての属性を一度に設定することができる。
+        """
+        self.poster_id = poster_id
+        self.poster_name = poster_name
+        self.title = title
+        self.url = url
+        self.thumbnail = thumbnail
+        self.posted_at = posted_at
+        self.updated_at = updated_at
+        self.tags = tags
+        self.is_deleted = is_deleted
+        self.description = description
+        self.duration = duration
+        self.view_count = view_count
+        self.like_count = like_count
+        self.comment_count = comment_count
+        self.start_at = start_at
+        self.end_at = end_at
+        self.status = status
+        self.archive_enabled_at = archive_enabled_at
+
+    def update_value(
+        self,
+        poster_id: str = None,
+        poster_name: str = None,
+        title: str = None,
+        url: str = None,
+        thumbnail: str = None,
+        posted_at: datetime = None,
+        updated_at: datetime = None,
+        tags: list[str] = None,
+        is_deleted: bool = None,
+        description: str = None,
+        duration: timedelta = None,
+        view_count: int = None,
+        like_count: int = None,
+        comment_count: int = None,
+        start_at: datetime = None,
+        end_at: datetime = None,
+        status: str = None,
+        archive_enabled_at: datetime = None,
+    ) -> None:
+        """属性を更新する
+
+        すべての属性を一度に更新することができる。
+        """
+        self.poster_id = poster_id if poster_id is not None else self.poster_id
+        self.poster_name = poster_name if poster_name is not None else self.poster_name
+        self.title = title if title is not None else self.title
+        self.url = url if url is not None else self.url
+        self.thumbnail = thumbnail if thumbnail is not None else self.thumbnail
+        self.posted_at = posted_at if posted_at is not None else self.posted_at
+        self.updated_at = updated_at if updated_at is not None else self.updated_at
+        self.tags = tags if tags is not None else self.tags
+        self.is_deleted = is_deleted if is_deleted is not None else self.is_deleted
+        self.description = description if description is not None else self.description
+        self.duration = duration if duration is not None else self.duration
+        self.view_count = view_count if view_count is not None else self.view_count
+        self.like_count = like_count if like_count is not None else self.like_count
+        self.comment_count = comment_count if comment_count is not None else self.comment_count
+        self.start_at = start_at if start_at is not None else self.start_at
+        self.end_at = end_at if end_at is not None else self.end_at
+        self.status = status if status is not None else self.status
+        self.archive_enabled_at = archive_enabled_at if archive_enabled_at is not None else self.archive_enabled_at
 
 
-class News(Content):
+class News(Content, ScrapingMixin):
     body: str
 
     def __init__(self, id: str) -> None:
         super().__init__(id)
-        self.body = ""
+        self.body = None
 
-    def __setattr__(self, __name: str, __value: Any) -> None:
-        # body
-        if __name == "body":
-            __value = unicodedata.normalize("NFKC", __value)
+    def set_value(
+        self,
+        poster_id: str = None,
+        poster_name: str = None,
+        title: str = None,
+        url: str = None,
+        thumbnail: str = None,
+        posted_at: datetime = None,
+        updated_at: datetime = None,
+        tags: list[str] = None,
+        is_deleted: bool = None,
+        body: str = None,
+    ) -> None:
+        """属性を設定する
 
-        super().__setattr__(__name, __value)
+        すべての属性を一度に設定することができる。
+        """
+        self.poster_id = poster_id
+        self.poster_name = poster_name
+        self.title = title
+        self.url = url
+        self.thumbnail = thumbnail
+        self.posted_at = posted_at
+        self.updated_at = updated_at
+        self.tags = tags
+        self.is_deleted = is_deleted
+        self.body = body
+
+    def update_value(
+        self,
+        poster_id: str = None,
+        poster_name: str = None,
+        title: str = None,
+        url: str = None,
+        thumbnail: str = None,
+        posted_at: datetime = None,
+        updated_at: datetime = None,
+        tags: list[str] = None,
+        is_deleted: bool = None,
+        body: str = None,
+    ) -> None:
+        """属性を更新する
+
+        すべての属性を一度に更新することができる。
+        """
+        self.poster_id = poster_id if poster_id is not None else self.poster_id
+        self.poster_name = poster_name if poster_name is not None else self.poster_name
+        self.title = title if title is not None else self.title
+        self.url = url if url is not None else self.url
+        self.thumbnail = thumbnail if thumbnail is not None else self.thumbnail
+        self.posted_at = posted_at if posted_at is not None else self.posted_at
+        self.updated_at = updated_at if updated_at is not None else self.updated_at
+        self.tags = tags if tags is not None else self.tags
+        self.is_deleted = is_deleted if is_deleted is not None else self.is_deleted
+        self.body = body if body is not None else self.body

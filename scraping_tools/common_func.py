@@ -1,6 +1,8 @@
 import time
 from datetime import datetime, timedelta
 import re
+from functools import wraps
+from selenium import webdriver
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
@@ -101,3 +103,30 @@ def parse_video_duration(duration_str: str) -> timedelta:
     video_duration = timedelta(hours=hours, minutes=minutes, seconds=seconds)
 
     return video_duration
+
+
+# スクレイピング処理を新しいタブで行うようにするデコレータ
+def scraping_in_new_tab(func):
+    """スクレイピング処理を新しいタブで行うようにするデコレータ
+
+    実行前に新しいタブを開き、実行後にタブを閉じる
+    ! このデコレータは、driverを第一引数に取る関数にのみ使用できる
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        # driverを取得
+        driver: webdriver.Chrome = args[0]
+
+        # 前処理
+        current_tab = driver.current_window_handle  # 現在のタブを取得
+        driver.switch_to.new_window("tab")  # 新しいタブを開く
+        while current_tab == driver.current_window_handle:  # 新しいタブが開くまで待機
+            time.sleep(0.1)
+        # 対象の関数を実行
+        func(*args, **kwargs)
+        # 後処理
+        driver.close()  # タブを閉じる
+        driver.switch_to.window(current_tab)  # 元のタブに戻る
+
+    return wrapper
