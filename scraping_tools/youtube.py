@@ -11,7 +11,7 @@ from googleapiclient.discovery import build
 import isodate
 
 from my_utilities.debug import execute_time
-from ..base_class import Platform, Live, Video
+from .base_class import Platform, Live, Video
 
 
 logger = logging.getLogger(__name__)
@@ -25,9 +25,6 @@ class YTChannel(Platform):
 
     # APIクライアントを作成
     client = build("youtube", "v3", developerKey=os.environ["YOUTUBE_API_KEY"])
-
-    def __init__(self, id: str) -> None:
-        super().__init__(id)
 
     def __del__(self) -> None:
         # APIクライアントを削除
@@ -63,9 +60,9 @@ class YTChannel(Platform):
         # feedを取得
         feed = feedparser.parse(f"https://www.youtube.com/feeds/videos.xml?channel_id={self.id}")
 
-        # ステータスコードが200以外なら例外を発生させる
-        if feed["status"] != 200 or feed["bozo"] != False:
-            raise  # TODO: 例外を作成する
+        # feedが正しく取得できているか確認
+        if feed["status"] > 400 or feed["bozo"] != False:
+            raise Exception("Failed to get feed")  # FIXME
 
         # 情報を辞書にまとめる
         contents = []

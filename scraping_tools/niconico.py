@@ -5,19 +5,13 @@ import requests
 import json
 import logging
 import feedparser
-import xmltodict
-import os
 import time
-from functools import wraps
-from pprint import pprint, pformat
 import xml.etree.ElementTree as ET
 
-from selenium import webdriver
 from selenium.webdriver.remote.webelement import WebElement
-from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import StaleElementReferenceException
 from selenium.common.exceptions import NoSuchElementException
 
 from bs4 import BeautifulSoup
@@ -38,9 +32,6 @@ NEWS_ID_PATTERN = "^ar\d+$"
 @execute_time()
 class NicoNicoChannel(Platform):
     """ニコニコチャンネルのコンテンツを取得するクラス"""
-
-    def __init__(self, channel_id: str):
-        super().__init__(channel_id)
 
     # トップページの全てのコンテンツを取得する
     def get_all(self, limit_live: int = 10, limit_video: int = 20, limit_news: int = 5) -> tuple[list[NicoNicoLive], list[NicoNicoVideo], list[NicoNicoChannel.News]]:
@@ -102,15 +93,15 @@ class NicoNicoChannel(Platform):
 
         # 放送中
         if now:
-            now_section: WebElement = self.wait.until(EC.presence_of_element_located((By.XPATH, '//section[@class="sub now"]')))
+            now_section: WebElement = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, '//section[@class="sub now"]')))
             lives.extend(self.__now_section(now_section, poster_id, poster_name))
         # 放送予定
         if future:
-            future_section: WebElement = self.wait.until(EC.presence_of_element_located((By.XPATH, '//section[@class="sub future"]')))
+            future_section: WebElement = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, '//section[@class="sub future"]')))
             lives.extend(self.__future_section(future_section, poster_id, poster_name))
         # 過去放送
         if past:
-            past_section: WebElement = self.wait.until(EC.presence_of_element_located((By.XPATH, '//section[@class="sub past"]')))
+            past_section: WebElement = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, '//section[@class="sub past"]')))
             lives.extend(self.__past_section(past_section, poster_id, poster_name))
 
         return lives
@@ -156,13 +147,22 @@ class NicoNicoChannel(Platform):
             # 状態
             status = "future"
             # タイトル
-            title = item.find_element(By.XPATH, './/h2[@class="title"]').text
+            title: str = item.find_element(By.XPATH, './/h2[@class="title"]').text
             # URL
-            url = item.find_element(By.XPATH, ".//h2[@class='title']/a").get_attribute("href")
+            url: str = item.find_element(By.XPATH, ".//h2[@class='title']/a").get_attribute("href")
             # ID
-            id = url.split("/")[-1]
+            id: str = url.split("/")[-1]
             # サムネイル
-            thumbnail = item.find_element(By.XPATH, ".//img").get_attribute("src")
+            thumbnail: str = item.find_element(By.XPATH, ".//img").get_attribute("src")
+            # 開始日時
+            start_at: str = item.find_element(By.XPATH, './/p[@class="date"]/strong').text  # ex:"09月23日 (土) 22時00分"
+            start_at: str = re.sub(r"\s*\([^)]*\)", "", start_at)  # 曜日部分を削除 ex:"09月23日 (土) 22時00分" -> "09月23日 22時00分"
+            start_at: datetime = datetime.strptime(start_at, "%m月%d日 %H時%M分")  # datetime型に変換
+            now = datetime.now()
+            if datetime.now().month > start_at.month:  # 月をまたいでいる場合は来年の月にする
+                start_at = start_at.replace(year=now.year + 1)
+            else:
+                start_at = start_at.replace(year=now.year)
 
             # 生放送情報を追加
             live = NicoNicoLive(id)
@@ -258,7 +258,7 @@ class NicoNicoChannel(Platform):
         poster_id: str = icon_link.find_element(By.XPATH, "./a").get_attribute("href").split("/")[-1]
 
         # アイテムを取得
-        items = self.wait.until(EC.presence_of_all_elements_located((By.XPATH, '//li[@class="item"]')))
+        items = WebDriverWait(self.driver, 20).until(EC.presence_of_all_elements_located((By.XPATH, '//li[@class="item"]')))
         # 動画情報を取得
         for item in items:
             # URL
@@ -321,10 +321,8 @@ class NicoNicoChannel(Platform):
         feed = feedparser.parse(f"https://ch.nicovideo.jp/{self.id}/blomaga/nico/feed")
 
         # フィードのステータスを確認
-        if feed["status"] == 200 or feed["status"] == 301 or feed["bozo"] == False:
-            pass
-        else:
-            raise  # FIXME
+        if feed["status"] > 400 or feed["bozo"] != False:
+            raise Exception("feed err")  # TODO: 例外を作成する
 
         # ニュースのアイテムを取得
         for entry in feed["entries"]:
@@ -371,13 +369,13 @@ class NicoNicoChannel(Platform):
             res = requests.get(f"https://ch.nicovideo.jp/{self.poster_id}/blomaga/{self.id}")
 
             # ステータスコードを確認
-            if res.status_code != 200 and res.status_code != 301:
-                raise
+            if res.status_code >= 400:
+                raise Exception("status code err")  # FIXME
 
             # BS4でパース
             soup = BeautifulSoup(res.text, "html.parser")
 
-            # JSON-LDタグを取得 ( <script type="application/ld+json">)
+            # JSON-LDタグを取得 <script type="application/ld+json">
             json_ld = soup.find("script", type="application/ld+json").string
             json_ld = json.loads(json_ld)[0]
 
@@ -433,7 +431,7 @@ class NicoNicoLive(Live):
         self.driver.get(f"https://live.nicovideo.jp/watch/{self.id}")
 
         # JSON-LDタグを取得
-        json_ld: WebElement = self.wait.until(EC.presence_of_element_located((By.XPATH, '//script[@type="application/ld+json"]')))
+        json_ld: WebElement = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, '//script[@type="application/ld+json"]')))
         json_ld: str = json_ld.get_attribute("innerHTML")
         json_ld: str = json.loads(json_ld)
 
@@ -541,8 +539,8 @@ class NicoNicoVideo(Video):
         # 動画情報を取得
         res = requests.get(f"https://ext.nicovideo.jp/api/getthumbinfo/{self.id}")
         # ステータスコードを確認
-        if res.status_code != 200:
-            raise  # FIXME
+        if res.status_code > 400:
+            raise Exception("status code err")  # FIXME
 
         # テキストに変換
         res.text.encode("utf-8")
