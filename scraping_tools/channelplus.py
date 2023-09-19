@@ -17,7 +17,7 @@ from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import TimeoutException
 
 from .base_class import ScrapingMixin, Platform, Live, Video, News
-from .common_func import get_matching_element, get_matching_all_elements, parse_video_duration, scraping_in_new_tab
+from .common_func import get_matching_element, get_matching_all_elements, parse_video_duration
 from my_utilities.debug import execute_time
 
 
