@@ -23,12 +23,12 @@ from my_utilities.debug import execute_time
 
 logger = logging.getLogger(__name__)
 
-root_xpath: str = '//div[@id="root"]'
+ROOT_XPATH: str = '//div[@id="root"]'
 HEADER_XPATH: str = '//div[@id="root"]/div/div[1]'
-main_xpath: str = '//div[@id="root"]/div/div[2]/div[1]'
-footer_xpath: str = '//div[@id="root"]/div/div[2]/div[2]'
-not_found_xpath: str = '//h5[text()="ページを表示することができませんでした"]'
-not_found_xpath2: str = '//h5[text()="お探しのページは見つかりませんでした"]'
+MAIN_XPATH: str = '//div[@id="root"]/div/div[2]/div[1]'
+FOOTER_XPATH: str = '//div[@id="root"]/div/div[2]/div[2]'
+NOT_FOUND_XPATH: str = '//h5[text()="ページを表示することができませんでした"]'
+NOT_FOUND_XPATH2: str = '//h5[text()="お探しのページは見つかりませんでした"]'
 LABEL_XPATH: str = '//span[@class="MuiChip-label MuiChip-labelSmall"]'
 
 
@@ -72,7 +72,7 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
         # セクションを取得出来るまでリトライ
         start = time.time()
         while True:
-            sections: list = self.driver.find_elements(By.XPATH, f"{main_xpath}/div/div")
+            sections: list = self.driver.find_elements(By.XPATH, f"{MAIN_XPATH}/div/div")
             if len(sections) >= 2:
                 break
             if time.time() - start > 20:
@@ -271,7 +271,7 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
         self.driver.execute_script("window.scrollTo(0, 0);")
 
         # メインの要素を取得
-        main = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, main_xpath)))
+        main = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, MAIN_XPATH)))
 
         # アイテムを取得
         items = get_matching_all_elements(base=main, tag="div", attribute="class", pattern=r"^.*MuiPaper-rounded.*$", limit=limit)
@@ -330,7 +330,7 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
         # URL
         url: str = self.driver.current_url
         # 投稿日時
-        posted_at: WebElement = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, f"{main_xpath}/div/div[4]/span")))
+        posted_at: WebElement = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, f"{MAIN_XPATH}/div/div[4]/span")))
         posted_at: str = posted_at.text  # ex:"2023/07/06","〇日前","〇時間前"
         try:
             posted_at: datetime = datetime.strptime(posted_at, "%Y/%m/%d")
@@ -344,7 +344,7 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
             else:
                 raise Exception("invalid posted_at")  # FIXME
         # 内容
-        body: WebElement = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, f"{main_xpath}/div/div[5]")))
+        body: WebElement = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, f"{MAIN_XPATH}/div/div[5]")))
         body: str = body.text
 
         # インスタンスを作成
@@ -370,7 +370,7 @@ class ChannelPlusContentMixin(ScrapingMixin):
         self.driver.get(f"https://nicochannel.jp/{self.poster_id}/live/{self.id}")
 
         # メインの要素を取得
-        main: WebElement = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, main_xpath)))
+        main: WebElement = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, MAIN_XPATH)))
 
         # タイトル
         title: str = main.find_element(By.XPATH, '//meta[@property="og:title"]').get_attribute("content")

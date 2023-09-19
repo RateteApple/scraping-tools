@@ -5,6 +5,7 @@ from .niconico import NicoNicoVideo
 from .channelplus import ChannelPlusChannel
 from .channelplus import ChannelPlusLive
 from .channelplus import ChannelPlusVideo
+from .channelplus import ChannelPlusNews
 
 from .youtube import YTChannel
 from .youtube import YTLive
@@ -20,6 +21,7 @@ __all__ = [
     "ChannelPlusChannel",
     "ChannelPlusLive",
     "ChannelPlusVideo",
+    "ChannelPlusNews",
     "YTChannel",
     "YTLive",
     "YTVideo",

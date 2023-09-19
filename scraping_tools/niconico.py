@@ -5,7 +5,6 @@ import requests
 import json
 import logging
 import feedparser
-import time
 import xml.etree.ElementTree as ET
 
 from selenium.webdriver.remote.webelement import WebElement
@@ -17,7 +16,7 @@ from selenium.common.exceptions import NoSuchElementException
 from bs4 import BeautifulSoup
 
 from .base_class import ScrapingMixin, Platform, Live, Video, News
-from .common_func import get_matching_element, get_matching_all_elements
+from .common_func import get_matching_element
 from my_utilities.debug import execute_time
 
 
