@@ -34,6 +34,7 @@ def get_matching_element(base: WebElement, tag: str, attribute: str, pattern: st
             # 要素が見つからない場合は次の要素へ
             except StaleElementReferenceException:
                 continue
+
             # 正規表現に一致したらWebElementを返す
             if re.match(pattern, value):
                 return element
@@ -44,7 +45,7 @@ def get_matching_element(base: WebElement, tag: str, attribute: str, pattern: st
 
 
 # 正規表現に一致する要素を全て取得する
-def get_matching_all_elements(base: WebElement, tag: str, attribute: str, pattern: str, timeout: int = 10) -> list:
+def get_matching_all_elements(base: WebElement, tag: str, attribute: str, pattern: str, timeout: int = 10, limit: int = 1000) -> list:
     """正規表現に一致する要素を全て取得する
 
     一致する要素が見つからなかった場合は空のリストを返す
@@ -69,9 +70,18 @@ def get_matching_all_elements(base: WebElement, tag: str, attribute: str, patter
             # 要素が見つからない場合は次の要素へ
             except StaleElementReferenceException:
                 continue
+
             # 正規表現に一致したらリストに追加
             if re.match(pattern, value):
                 match_elements.append(element)
+
+            # 指定された数の要素を取得したらリストを返す
+            if len(match_elements) >= limit:
+                return match_elements
+
+        # 全ての要素を確認したらリストを返す
+        if len(match_elements) > 0:
+            return match_elements
 
         # 実行時間が指定時間を超えたらリストを返す
         if time.time() - start > timeout:

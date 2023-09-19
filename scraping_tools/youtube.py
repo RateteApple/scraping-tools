@@ -96,7 +96,7 @@ class YTChannel(Platform):
             item = {**sni, **sta, **stre, **con}
             items.append(item)
 
-        # # デバッグ用の出力 FIXME
+        # # デバッグ用の出力
         # with open("items.json", "w", encoding="UTF-8") as f:
         #     f.write(json.dumps(items, indent=4, ensure_ascii=False))
 

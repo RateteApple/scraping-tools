@@ -29,8 +29,6 @@ class ScrapingMixin(object):
         options.add_argument("--blink-settings=imagesEnabled=false")  # 画像を読み込まない
         options.add_argument("--disable-extensions")  # 拡張機能を無効化
 
-        # FIXME
-
         if os.environ.get("SCRAPING_TOOLS_HEADLESS_MODE") == "True":
             options.add_argument("--headless")
 
@@ -41,12 +39,12 @@ class ScrapingMixin(object):
     def close_browser(self) -> None:
         """ブラウザを閉じる"""
         # インスタンス変数にブラウザが存在する場合は閉じる
-        if hasattr(self, "driver"):
+        if self.__dict__.get("driver"):
             self.driver.quit()
 
     def __getattr__(self, name: str) -> None:
         """ブラウザが開かれていない場合にブラウザを開く"""
-        if name == "driver":
+        if name == "driver" and not self.__dict__.get("driver"):
             self.open_browser()
             return self.driver
 
@@ -55,13 +53,13 @@ class ScrapingMixin(object):
         self.close_browser()
 
 
-class Platform(ScrapingMixin):
+class Platform:
     def __init__(self, id: str) -> None:
         """チャンネルIDなどサイト毎の固有IDを設定する"""
         self.id = id
 
 
-class Content(ScrapingMixin):
+class Content:
     """コンテンツの基底クラス"""
 
     id: str
@@ -96,6 +94,9 @@ class Content(ScrapingMixin):
             # datetimeは文字列に変換
             if isinstance(value, datetime):
                 values[key] = value.isoformat()
+            # timedeltaは文字列に変換
+            elif isinstance(value, timedelta):
+                values[key] = str(value)
             # 長すぎる文字列は省略
             elif isinstance(value, str) and len(value) > 120:
                 values[key] = value[:120] + "..."
@@ -106,9 +107,6 @@ class Content(ScrapingMixin):
         return pformat(values)
 
     def __setattr__(self, __name: str, __value: Any) -> None:
-        # 値がNoneの場合はパス
-        if __value is None:
-            return
         # strは正規化
         if isinstance(__value, str):
             __value = unicodedata.normalize("NFKC", __value)

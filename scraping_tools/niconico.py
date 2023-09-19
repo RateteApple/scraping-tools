@@ -16,7 +16,7 @@ from selenium.common.exceptions import NoSuchElementException
 
 from bs4 import BeautifulSoup
 
-from .base_class import Platform, Live, Video, News
+from .base_class import ScrapingMixin, Platform, Live, Video, News
 from .common_func import get_matching_element, get_matching_all_elements
 from my_utilities.debug import execute_time
 
@@ -30,7 +30,7 @@ NEWS_ID_PATTERN = "^ar\d+$"
 
 
 @execute_time()
-class NicoNicoChannel(Platform):
+class NicoNicoChannel(Platform, ScrapingMixin):
     """ニコニコチャンネルのコンテンツを取得するクラス"""
 
     def __init__(self, id: str) -> None:
@@ -84,7 +84,6 @@ class NicoNicoChannel(Platform):
                 next_disableds: list = self.driver.find_elements(By.XPATH, '//li[@class="next disabled"]')
                 if next_buttons or next_disableds:
                     break
-                time.sleep(0.2)  # FIXME
             else:
                 raise  # FIXME
 
@@ -248,7 +247,6 @@ class NicoNicoChannel(Platform):
                 next_disableds: list = self.driver.find_elements(By.XPATH, '//li[@class="next disabled"]')
                 if next_buttons or next_disableds:
                     break
-                time.sleep(0.2)  # FIXME
             else:
                 raise  # FIXME
 
@@ -329,7 +327,7 @@ class NicoNicoChannel(Platform):
 
         # フィードのステータスを確認
         if feed["status"] > 400 or feed["bozo"] != False:
-            raise Exception("feed err")  # TODO: 例外を作成する
+            raise Exception("feed err")  # FIXME: 例外を作成する
 
         # ニュースのアイテムを取得
         for entry in feed["entries"]:
@@ -425,7 +423,7 @@ class NicoNicoChannel(Platform):
 
 
 @execute_time()
-class NicoNicoLive(Live):
+class NicoNicoLive(Live, ScrapingMixin):
     """生放送の情報を管理するクラス"""
 
     @classmethod
