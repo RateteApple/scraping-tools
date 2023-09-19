@@ -1,7 +1,14 @@
 [project]
 name = "scraping_tools"
-version = "0.5.2"
+version = "0.5.3"
 description = "スクレイピング処理を行うスクリプト群"
 dynamic = ["dependencies"]
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+include = ["scraping_tools*"]
+exclude = ["memo*"]
