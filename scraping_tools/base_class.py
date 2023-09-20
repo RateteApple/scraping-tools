@@ -119,18 +119,23 @@ class Content:
 
     @classmethod
     def from_dict(cls, dict: dict) -> Content:
-        """辞書からインスタンスを生成する"""
+        # to_dictの逆変換を行う
+        for key, value in dict.items():
+            if isinstance(value, str):
+                if "_at" in key:
+                    dict[key] = datetime.fromisoformat(value)
+                elif "duration" in key:
+                    dict[key] = timedelta(seconds=int(value))
+
         # インスタンスを生成
         instance = cls(dict["id"])
-        # 属性を設定
-        for key, value in dict.items():
-            setattr(instance, key, value)
 
-        # インスタンスを返す
+        # 辞書の値をインスタンスに設定
+        instance.set_value(**dict)
+
         return instance
 
     def to_dict(self) -> dict:
-        result = {}
         # クラスの全ての属性名を取得
         all_attributes = dir(self)
 
@@ -140,7 +145,20 @@ class Content:
         # "_"から始まる属性を除外
         attributes = [attribute for attribute in attributes if not attribute.startswith("_")]
 
-        return result
+        # datetimeは文字列に変換
+        for attribute in attributes:
+            if isinstance(getattr(self, attribute), datetime):
+                setattr(self, attribute, getattr(self, attribute).isoformat())
+
+        # timedeltaは文字列に変換
+        for attribute in attributes:
+            if isinstance(getattr(self, attribute), timedelta):
+                setattr(self, attribute, (getattr(self, attribute)).total_seconds())
+
+        # 辞書に変換
+        _dict = {attribute: getattr(self, attribute) for attribute in attributes}
+
+        return _dict
 
 
 class Video(Content):
@@ -231,7 +249,13 @@ class Video(Content):
         self.comment_count = comment_count if comment_count is not None else self.comment_count
 
 
-class Live(Video):
+class Live(Content):
+    description: str
+    duration: timedelta
+    view_count: int
+    like_count: int
+    comment_count: int
+
     start_at: datetime
     end_at: datetime
     status: str
@@ -239,6 +263,11 @@ class Live(Video):
 
     def __init__(self, id: str) -> None:
         super().__init__(id)
+        self.description = None
+        self.duration = None
+        self.view_count = None
+        self.like_count = None
+        self.comment_count = None
         self.start_at = None
         self.end_at = None
         self.status = None
