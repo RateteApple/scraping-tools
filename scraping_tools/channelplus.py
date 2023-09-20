@@ -31,6 +31,8 @@ NOT_FOUND_XPATH: str = '//h5[text()="ページを表示することができま�
 NOT_FOUND_XPATH2: str = '//h5[text()="お探しのページは見つかりませんでした"]'
 LABEL_XPATH: str = '//span[@class="MuiChip-label MuiChip-labelSmall"]'
 
+# FIXME: 画像を読み込むまで待機する処理が必要
+
 
 @execute_time()
 class ChannelPlusChannel(Platform, ScrapingMixin):
@@ -54,12 +56,11 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
         # options.add_argument("--blink-settings=imagesEnabled=false")  # 画像を読み込まない
         options.add_argument("--disable-extensions")  # 拡張機能を無効化
 
-        # FIXME
-
         if os.environ.get("SCRAPING_TOOLS_HEADLESS_MODE") == "True":
             options.add_argument("--headless")
 
         self.driver = webdriver.Chrome(options)
+        self.driver.implicitly_wait(20)
 
         return self.driver
 
@@ -158,7 +159,7 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
         return live
 
     # トップページの動画を取得する
-    def get_video(self, type_: str = "upload") -> list[ChannelPlusVideo]:
+    def get_video(self, type_: str = "upload", limit: int = 5) -> list[ChannelPlusVideo]:
         """ニコニコチャンネルプラスの動画ページをスクレイピングする"""
         # 動画ページを開く
         self.driver.get(f"https://nicochannel.jp/{self.id}/videos")
@@ -175,10 +176,20 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
         else:
             raise ValueError("type must be 'upload' or 'archive' or 'all'")
 
-        # 一番下にたどり着くまでスクロール
         while True:
-            # 一番下までスクロール
-            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            # 表示されているアイテム数を取得
+            main: WebElement = self.driver.find_element(By.XPATH, MAIN_XPATH)
+            items: list = get_matching_all_elements(base=main, tag="div", attribute="class", pattern=r"^.*MuiGrid-item.*$")
+            # アイテムがなければ空リストを返して終了
+            if not items:
+                return []
+            # アイテム数が指定数以上になったら終了
+            if len(items) >= limit:
+                break
+
+            # 最後のアイテムの位置にスクロール
+            self.driver.execute_script("arguments[0].scrollIntoView();", items[-1])
+
             # 「すべて表示しています」というテキストがあるか確認
             try:
                 self.driver.find_element(By.XPATH, '//span[text()="すべて表示しています"]')
@@ -186,12 +197,6 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
                 continue
             else:
                 break
-
-        # アイテムを取得
-        main: WebElement = self.driver.find_element(By.XPATH, '//div[@id="root"]/div/div[2]/div[1]')
-        items: list = get_matching_all_elements(base=main, tag="div", attribute="class", pattern=r"^.*MuiGrid-item.*$")
-        if not items:
-            return []
 
         # 各アイテムから動画情報を取得
         videos = [self.__video_item(item) for item in items]
@@ -291,7 +296,12 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
         # タイトル
         title: str = item.find_element(By.XPATH, ".//h6").text
         # サムネイル
-        thumbnail: str = item.find_element(By.XPATH, ".//img").get_attribute("src")
+        while True:
+            try:
+                thumbnail: str = item.find_element(By.XPATH, ".//img").get_attribute("src")
+                break
+            except:
+                pass
 
         # 新しいタブを開く
         current_tab = self.driver.current_window_handle
