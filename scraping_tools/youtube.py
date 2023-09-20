@@ -30,7 +30,20 @@ class YTChannel(Platform):
         # APIクライアントを削除
         del self.client
 
-    def get_contents(self, requet_type: str = "api", limit: int = 5) -> list[dict]:
+    def get_ids(self, requet_type: str = "api", limit: int = 5) -> list[dict]:
+        """チャンネルのコンテンツのIDを取得するメソッド
+
+        Args:
+            requet_type (str, optional): 取得方法. Defaults to "api".
+                "api": APIを使用して取得
+                "feed": RSSフィードを使用して取得
+
+            limit (int, optional): 取得するコンテンツの数. Defaults to 5.
+
+        Returns:
+            list[dict]: コンテンツのIDとetagのリスト
+                dict: {"id": str, "etag": str}
+        """
         if requet_type == "api":
             contents = self.__get_ids_from_api(limit)
         elif requet_type == "feed":
@@ -72,8 +85,17 @@ class YTChannel(Platform):
 
         return contents
 
-    def get_detail(self, ids: list) -> list:
-        """コンテンツの詳細を取得するメソッド"""
+    def get_detail(self, ids: list) -> dict[str, list]:
+        """コンテンツの詳細を取得するメソッド
+
+        Args:
+            ids (list): IDのリスト
+
+        Returns:
+            dict[str, list]: コンテンツのリスト
+                dict["video"]: 動画のリスト
+                dict["live"]: 生放送のリスト
+        """
         # APIで情報を取得
         snippet: dict = self.client.videos().list(id=",".join(ids), part="snippet").execute()
         statistics: dict = self.client.videos().list(id=",".join(ids), part="statistics").execute()
@@ -101,12 +123,18 @@ class YTChannel(Platform):
         #     f.write(json.dumps(items, indent=4, ensure_ascii=False))
 
         # 情報を取得
-        contents = []
+        videos = []
+        lives = []
         for item in items:
             content = self.__item_to_instance(item)
-            contents.append(content)
+            if isinstance(content, YTVideo):
+                videos.append(content)
+            elif isinstance(content, YTLive):
+                lives.append(content)
+            else:
+                raise Exception("Failed to get content")  # FIXME
 
-        return contents
+        return {"video": videos, "live": lives}
 
     def __item_to_instance(self, item: dict) -> Video:
         """アイテムをインスタンスに変換するメソッド"""
