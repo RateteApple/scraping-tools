@@ -19,7 +19,6 @@ logger = logging.getLogger(__name__)
 THUMBNAIL_SIZES = ("maxres", "standard", "high", "medium", "default")
 
 
-@execute_time()
 class YTChannel(Platform):
     """YouTubeAPIのヘルパークラス"""
 

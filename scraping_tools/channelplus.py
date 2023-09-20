@@ -34,7 +34,6 @@ LABEL_XPATH: str = '//span[@class="MuiChip-label MuiChip-labelSmall"]'
 # FIXME: 画像を読み込むまで待機する処理が必要
 
 
-@execute_time()
 class ChannelPlusChannel(Platform, ScrapingMixin):
     """ニコニコチャンネルプラスのコンテンツを取得するクラス"""
 

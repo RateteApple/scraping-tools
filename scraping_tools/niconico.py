@@ -29,7 +29,6 @@ VIDEO_ID_PATTERN = "^so\d+$"
 NEWS_ID_PATTERN = "^ar\d+$"
 
 
-@execute_time()
 class NicoNicoChannel(Platform, ScrapingMixin):
     """ニコニコチャンネルのコンテンツを取得するクラス"""
 
@@ -290,11 +289,11 @@ class NicoNicoChannel(Platform, ScrapingMixin):
                 comment_count: int = int(item.find_element(By.XPATH, './/li[@class="comment "]/var').text.replace(",", ""))
             except NoSuchElementException:
                 comment_count = 0
-            # マイリスト数
-            try:
-                my_list_count: int = int(item.find_element(By.XPATH, './/li[@class="mylist "]//var').text.replace(",", ""))
-            except NoSuchElementException:
-                my_list_count = 0
+            # # マイリスト数
+            # try:
+            #     my_list_count: int = int(item.find_element(By.XPATH, './/li[@class="mylist "]//var').text.replace(",", ""))
+            # except NoSuchElementException:
+            #     my_list_count = 0
             # 再生時間
             minute, second = item.find_element(By.XPATH, './/span[@class="badge br length"]').text.split(":")
             duration: timedelta = timedelta(minutes=int(minute), seconds=int(second))
@@ -311,7 +310,7 @@ class NicoNicoChannel(Platform, ScrapingMixin):
                 posted_at=posted_at,
                 view_count=view_count,
                 comment_count=comment_count,
-                my_list_count=my_list_count,
+                # my_list_count=my_list_count,
                 duration=duration,
             )
             videos.append(video)
