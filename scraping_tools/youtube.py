@@ -85,16 +85,14 @@ class YTChannel(Platform):
 
         return contents
 
-    def get_detail(self, ids: list) -> dict[str, list]:
+    def get_detail(self, ids: list) -> list:
         """コンテンツの詳細を取得するメソッド
 
         Args:
             ids (list): IDのリスト
 
         Returns:
-            dict[str, list]: コンテンツのリスト
-                dict["video"]: 動画のリスト
-                dict["live"]: 生放送のリスト
+            list: コンテンツのリスト
         """
         # APIで情報を取得
         snippet: dict = self.client.videos().list(id=",".join(ids), part="snippet").execute()
@@ -123,18 +121,12 @@ class YTChannel(Platform):
         #     f.write(json.dumps(items, indent=4, ensure_ascii=False))
 
         # 情報を取得
-        videos = []
-        lives = []
+        contents = []
         for item in items:
             content = self.__item_to_instance(item)
-            if isinstance(content, YTVideo):
-                videos.append(content)
-            elif isinstance(content, YTLive):
-                lives.append(content)
-            else:
-                raise Exception("Failed to get content")  # FIXME
+            contents.append(content)
 
-        return {"video": videos, "live": lives}
+        return contents
 
     def __item_to_instance(self, item: dict) -> Video:
         """アイテムをインスタンスに変換するメソッド"""
