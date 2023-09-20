@@ -134,17 +134,13 @@ class Content:
         # クラスの全ての属性名を取得
         all_attributes = dir(self)
 
-        # Noneを含む属性を辞書に追加
-        for attr_name in all_attributes:
-            if attr_name == "driver":
-                continue
-            attr_value = getattr(self, attr_name)
-            result[attr_name] = attr_value
+        # メソッドを除外
+        attributes = [attribute for attribute in all_attributes if not callable(getattr(self, attribute))]
+
+        # "_"から始まる属性を除外
+        attributes = [attribute for attribute in attributes if not attribute.startswith("_")]
 
         return result
-
-    def to_json(self) -> str:
-        return json.dumps(self.to_dict())
 
 
 class Video(Content):
