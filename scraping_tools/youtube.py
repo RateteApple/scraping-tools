@@ -26,33 +26,17 @@ class YTChannel(Platform):
     # APIクライアントを作成
     client = build("youtube", "v3", developerKey=os.environ["YOUTUBE_API_KEY"])
 
-    def get_ids(self, requet_type: str = "api", limit: int = 5) -> list[dict]:
-        """チャンネルのコンテンツのIDを取得するメソッド
+    def get_from_api(self, limit: int = 5, order: str = "date") -> list[dict]:
+        """チャンネルのコンテンツを取得するメソッド
 
         Args:
-            requet_type (str, optional): 取得方法. Defaults to "api".
-                "api": APIを使用して取得
-                "feed": RSSフィードを使用して取得
-
             limit (int, optional): 取得するコンテンツの数. Defaults to 5.
 
         Returns:
             list[dict]: コンテンツのIDとetagのリスト
-                dict: {"id": str, "etag": str}
         """
-        if requet_type == "api":
-            contents = self.__get_ids_from_api(limit)
-        elif requet_type == "feed":
-            contents = self.__get_ids_from_feed()
-        else:
-            raise ValueError(f"resquet_type must be 'api' or 'feed', not '{requet_type}'")
-
-        return contents
-
-    def __get_ids_from_api(self, limit: int) -> list[dict]:
-        """チャンネルのコンテンツを取得するメソッド"""
         # APIで情報を取得
-        res = self.client.search().list(channelId=self.id, part="snippet", maxResults=limit, type="video", order="date", safeSearch="none").execute()
+        res = self.client.search().list(channelId=self.id, part="snippet", maxResults=limit, type="video", order=order, safeSearch="none").execute()
 
         # IDとetagを取得
         contents = []
@@ -62,7 +46,7 @@ class YTChannel(Platform):
 
         return contents
 
-    def __get_ids_from_feed(self) -> list[dict]:
+    def get_ids_from_feed(self) -> list[str]:
         """チャンネルのコンテンツを取得するメソッド
 
         15件までしか取得できない"""
@@ -73,13 +57,10 @@ class YTChannel(Platform):
         if feed["status"] > 400 or feed["bozo"] != False:
             raise Exception("Failed to get feed")  # FIXME
 
-        # 情報を辞書にまとめる
-        contents = []
-        for item in feed["entries"]:
-            content = {"id": item["yt_videoid"]}
-            contents.append(content)
+        # IDのリストを作成
+        ids = [item["yt_videoid"] for item in feed["entries"]]
 
-        return contents
+        return ids
 
     def get_detail(self, ids: list) -> list:
         """コンテンツの詳細を取得するメソッド
@@ -90,6 +71,11 @@ class YTChannel(Platform):
         Returns:
             list: コンテンツのリスト
         """
+        if not ids:
+            raise ValueError("ids is empty")
+        if type(ids) != list:
+            raise TypeError("ids is not list")
+
         # APIで情報を取得
         snippet: dict = self.client.videos().list(id=",".join(ids), part="snippet").execute()
         statistics: dict = self.client.videos().list(id=",".join(ids), part="statistics").execute()
@@ -106,7 +92,7 @@ class YTChannel(Platform):
         # with open("content_details.json", "w", encoding="UTF-8") as f:
         #     f.write(json.dumps(content_details, indent=4, ensure_ascii=False))
 
-        # 取得したアイテムを結合
+        # レスポンスのアイテムを結合
         items = []
         for sni, sta, stre, con in zip(snippet["items"], statistics["items"], streaming_details["items"], content_details["items"]):
             item = {**sni, **sta, **stre, **con}
@@ -116,11 +102,8 @@ class YTChannel(Platform):
         # with open("items.json", "w", encoding="UTF-8") as f:
         #     f.write(json.dumps(items, indent=4, ensure_ascii=False))
 
-        # 情報を取得
-        contents = []
-        for item in items:
-            content = self.__item_to_instance(item)
-            contents.append(content)
+        # アイテムからインスタンスを作成してリストに追加
+        contents = [self.__item_to_instance(item) for item in items]
 
         return contents
 
@@ -130,6 +113,7 @@ class YTChannel(Platform):
         id = item["id"]
         # 投稿日時
         posted_at = datetime.fromisoformat(item["snippet"]["publishedAt"])
+        posted_at: str = posted_at.isoformat()
         # 投稿者ID
         poster_id = item["snippet"]["channelId"]
         # タイトル
@@ -161,20 +145,20 @@ class YTChannel(Platform):
             # 放送中
             if item["snippet"]["liveBroadcastContent"] == "live":
                 status = "now"
-                start_at = datetime.fromisoformat(item["liveStreamingDetails"]["actualStartTime"])
+                start_at = item["liveStreamingDetails"]["actualStartTime"]
                 end_at = None
                 duration = None
             # 放送予定
             elif "scheduledStartTime" in item["liveStreamingDetails"]:
                 status = "future"
-                start_at = datetime.fromisoformat(item["liveStreamingDetails"]["scheduledStartTime"])
+                start_at = item["liveStreamingDetails"]["scheduledStartTime"]
                 end_at = None
                 duration = None
             # 放送済み
             else:
                 status = "past"
-                start_at = datetime.fromisoformat(item["liveStreamingDetails"]["actualStartTime"])
-                end_at = datetime.fromisoformat(item["liveStreamingDetails"]["actualEndTime"])
+                start_at = item["liveStreamingDetails"]["actualStartTime"]
+                end_at = item["liveStreamingDetails"]["actualEndTime"]
                 duration: timedelta = isodate.parse_duration(item["contentDetails"]["duration"])
                 duration: int = int(duration.total_seconds())
 
@@ -185,7 +169,7 @@ class YTChannel(Platform):
                 title=title,
                 url=url,
                 thumbnail=thumbnail,
-                posted_at=posted_at.isoformat(),
+                posted_at=posted_at,
                 tags=tags,
                 is_deleted=False,  # FIXME
                 description=description,
@@ -193,8 +177,8 @@ class YTChannel(Platform):
                 view_count=view_count,
                 like_count=like_count,
                 comment_count=comment_count,
-                start_at=start_at.isoformat(),
-                end_at=end_at.isoformat() if end_at else None,
+                start_at=start_at,
+                end_at=end_at,
                 status=status,
             )
 
@@ -210,7 +194,7 @@ class YTChannel(Platform):
                 title=title,
                 url=url,
                 thumbnail=thumbnail,
-                posted_at=posted_at.isoformat(),
+                posted_at=posted_at,
                 tags=tags,
                 is_deleted=False,  # FIXME
                 description=description,

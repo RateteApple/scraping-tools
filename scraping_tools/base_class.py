@@ -17,6 +17,14 @@ from selenium.common.exceptions import StaleElementReferenceException
 
 
 class ScrapingMixin(object):
+    """スクレイピング用のミックスインクラス"""
+
+    _driver: webdriver.Chrome
+    _timeout: int = 20
+    _wait: WebDriverWait
+    _gui: bool = False
+    _img_load: bool = False
+
     def open_browser(self) -> None:
         """ブラウザを開く
 
@@ -27,27 +35,31 @@ class ScrapingMixin(object):
         options.add_argument("--disable-gpu")  # GPUの使用を無効化
         options.add_argument("--window-size=1920,1080")  # Windowサイズを1920x1080に設定
         options.add_experimental_option("excludeSwitches", ["enable-logging"])  # ログを無効化
-        options.add_argument("--blink-settings=imagesEnabled=false")  # 画像を読み込まない
         options.add_argument("--disable-extensions")  # 拡張機能を無効化
-
-        if os.environ.get("SCRAPING_TOOLS_HEADLESS_MODE") == "True":
+        # 画像読み込みの設定
+        if not self._img_load:
+            options.add_argument("--blink-settings=imagesEnabled=false")
+        # ヘッドレスモードの設定
+        if not self._gui:
             options.add_argument("--headless")
+        # ブラウザを開く
+        self._driver = webdriver.Chrome(options)
+        # 待機時間を設定
+        self._wait = WebDriverWait(self._driver, self._timeout)
 
-        self.driver = webdriver.Chrome(options)
-
-        return self.driver
+        return self._driver
 
     def close_browser(self) -> None:
         """ブラウザを閉じる"""
         # インスタンス変数にブラウザが存在する場合は閉じる
-        if self.__dict__.get("driver"):
-            self.driver.quit()
+        if "_driver" in self.__dict__:
+            self._driver.quit()
 
     def __getattr__(self, name: str) -> None:
         """ブラウザが開かれていない場合にブラウザを開く"""
-        if name == "driver" and not self.__dict__.get("driver"):
+        if name == "_driver" and not "_driver" in self.__dict__:
             self.open_browser()
-            return self.driver
+            return self._driver
 
     def __del__(self) -> None:
         # ブラウザを閉じる
@@ -92,14 +104,8 @@ class Content:
     def __repr__(self) -> str:
         values: dict = vars(self)
         for key, value in values.items():
-            # datetimeは文字列に変換
-            if isinstance(value, datetime):
-                values[key] = value.isoformat()
-            # timedeltaは文字列に変換
-            elif isinstance(value, timedelta):
-                values[key] = str(value)
             # 長すぎる文字列は省略
-            elif isinstance(value, str) and len(value) > 120:
+            if isinstance(value, str) and len(value) > 120:
                 values[key] = value[:120] + "..."
             # 長すぎるリストは省略
             elif isinstance(value, list) and len(value) > 8:
@@ -141,6 +147,28 @@ class Content:
         _dict = {attribute: getattr(self, attribute) for attribute in attributes}
 
         return _dict
+
+    def diff(self, other: Content) -> dict:
+        """他のインスタンスとの差分を取得する
+
+        他のインスタンスとの差分を辞書で返す。
+        """
+        # クラスの全ての属性名を取得
+        all_attributes = dir(self)
+
+        # メソッドを除外
+        attributes = [attribute for attribute in all_attributes if not callable(getattr(self, attribute))]
+
+        # "_"から始まる属性を除外
+        attributes = [attribute for attribute in attributes if not attribute.startswith("_")]
+
+        # 差分を取得
+        diff: list[dict[str, tuple]] = []
+        for attribute in attributes:
+            if getattr(self, attribute) != getattr(other, attribute):
+                diff.append({attribute: (getattr(self, attribute), getattr(other, attribute))})
+
+        return diff
 
 
 class Video(Content):

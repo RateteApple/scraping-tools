@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import re
 import requests
 import json
+import time
 import logging
 import feedparser
 import xml.etree.ElementTree as ET
@@ -39,26 +40,12 @@ class NicoNicoChannel(Platform, ScrapingMixin):
         check_channel_id(id)
         super().__init__(id)
 
-    # トップページの全てのコンテンツを取得する
-    def get_all(self, limit_live: int = 10, limit_video: int = 20, limit_news: int = 5) -> tuple[list[NicoNicoLive], list[NicoNicoVideo], list[NicoNicoChannel.News]]:
-        """ニコニコチャンネルに含まれる全てのコンテンツを取得する"""
-        lives = self.get_live(limit_live)
-        videos = self.get_video(limit_video)
-        newses = self.get_news(limit_news)
-
-        return lives, videos, newses
-
     # トップページの生放送を取得する
     def get_live(self, limit: int = 10) -> list[NicoNicoLive]:
         """ニコニコチャンネルの生放送ページから一覧をスクレイピングする
 
         1ページには大体10個の生放送が含まれている（放送予定、放送中の要素がある場合は増える）
         """
-        lives = self.__live_page_loop(limit)
-        return lives
-
-    def __live_page_loop(self, limit: int) -> list[NicoNicoLive]:
-        """ニコニコチャンネルの生放送ページから一覧をスクレイピングする"""
         lives = []
 
         # 取得したアイテム数がlimitに達するまでループ
@@ -68,7 +55,7 @@ class NicoNicoChannel(Platform, ScrapingMixin):
             page += 1
 
             # ページを開く
-            self.driver.get(f"https://ch.nicovideo.jp/{self.id}/live?page={page}")
+            self._driver.get(f"https://ch.nicovideo.jp/{self.id}/live?page={page}")
 
             # 1ページ目は放送中、放送予定、過去放送の全てを取得
             if page == 1:
@@ -77,36 +64,38 @@ class NicoNicoChannel(Platform, ScrapingMixin):
             else:
                 lives.extend(self.__live_page(now=False, future=False, past=True))
 
-            # FIXME: 次のページがあるかどうかを確認
-            for _ in range(30):
-                next_buttons: list = self.driver.find_elements(By.XPATH, '//li[@class="next"]/a')
-                next_disableds: list = self.driver.find_elements(By.XPATH, '//li[@class="next disabled"]')
+            # 次のページがあるかどうかを確認
+            while True:
+                start = time.time()
+                next_buttons: list = self._driver.find_elements(By.XPATH, '//li[@class="next"]/a')
+                next_disableds: list = self._driver.find_elements(By.XPATH, '//li[@class="next disabled"]')
                 if next_buttons or next_disableds:
                     break
-            else:
-                raise  # FIXME
+                end = time.time()
+                if end - start > self._timeout:
+                    raise Exception("timeout")  # FIXME: 例外を作成する
 
         return lives
 
-    def __live_page(self, now=True, future=True, past=True) -> list[NicoNicoLive]:
+    def __live_page(self, now: bool, future: bool, past: bool) -> list[NicoNicoLive]:
         lives = []
 
         # 投稿者の名前とIDを取得
-        icon_link: WebElement = get_matching_element(base=self.driver, tag="span", attribute="class", pattern=r"^.*thumb_wrapper_ch.*$")
+        icon_link: WebElement = get_matching_element(base=self._driver, tag="span", attribute="class", pattern=r"^.*thumb_wrapper_ch.*$")
         poster_name: str = icon_link.find_element(By.XPATH, "./a").get_attribute("title")
         poster_id: str = icon_link.find_element(By.XPATH, "./a").get_attribute("href").split("/")[-1]
 
         # 放送中
         if now:
-            now_section: WebElement = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, '//section[@class="sub now"]')))
+            now_section: WebElement = self._wait.until(EC.presence_of_element_located((By.XPATH, '//section[@class="sub now"]')))
             lives.extend(self.__now_section(now_section, poster_id, poster_name))
         # 放送予定
         if future:
-            future_section: WebElement = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, '//section[@class="sub future"]')))
+            future_section: WebElement = self._wait.until(EC.presence_of_element_located((By.XPATH, '//section[@class="sub future"]')))
             lives.extend(self.__future_section(future_section, poster_id, poster_name))
         # 過去放送
         if past:
-            past_section: WebElement = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, '//section[@class="sub past"]')))
+            past_section: WebElement = self._wait.until(EC.presence_of_element_located((By.XPATH, '//section[@class="sub past"]')))
             lives.extend(self.__past_section(past_section, poster_id, poster_name))
 
         return lives
@@ -115,7 +104,7 @@ class NicoNicoChannel(Platform, ScrapingMixin):
         lives = []
         item: WebElement
         # アイテム要素を取得
-        items: list = section.find_elements(By.XPATH, './div[@id="live_now"]/div[@id="live_now_cnt"]/ul/li[@class="item"]')
+        items: list = section.find_elements(By.XPATH, './/div[@id="live_now"]/div[@id="live_now_cnt"]/ul/li[@class="item"]')
         # アイテムから情報を取得
         for item in items:
             # 状態
@@ -131,13 +120,14 @@ class NicoNicoChannel(Platform, ScrapingMixin):
 
             # 生放送情報を追加
             live = NicoNicoLive(id)
-            live.poster_id = poster_id
-            live.poster_name = poster_name
-            live.status = status
-            live.title = title
-            live.url = url
-            live.thumbnail = thumbnail
-            lives.append(live)
+            live.set_value(
+                poster_id=poster_id,
+                poster_name=poster_name,
+                status=status,
+                title=title,
+                url=url,
+                thumbnail=thumbnail,
+            )
 
         # 結果を返す
         return lives
@@ -168,6 +158,7 @@ class NicoNicoChannel(Platform, ScrapingMixin):
                 start_at = start_at.replace(year=now.year + 1)
             else:
                 start_at = start_at.replace(year=now.year)
+            start_at: str = start_at.isoformat()  # ISO8601形式に変換
 
             # 生放送情報を追加
             live = NicoNicoLive(id)
@@ -178,7 +169,7 @@ class NicoNicoChannel(Platform, ScrapingMixin):
                 title=title,
                 url=url,
                 thumbnail=thumbnail,
-                start_at=start_at.isoformat(),
+                start_at=start_at,
             )
 
         # 結果を返す
@@ -202,9 +193,10 @@ class NicoNicoChannel(Platform, ScrapingMixin):
             # サムネイル
             thumbnail = item.find_element(By.XPATH, ".//img").get_attribute("src")
             # 開始日時
-            actual_start_at: str = item.find_element(By.XPATH, './/p[@class="date"]').text  # ex:"放送開始：2023/09/04 (月) 22:50:00"
-            actual_start_at: str = re.sub(r"\s*\([^)]*\)", "", actual_start_at)  # 曜日部分を削除
-            actual_start_at: datetime = datetime.strptime(actual_start_at, "放送開始：%Y/%m/%d %H:%M:%S")  # datetime型に変換
+            start_at: str = item.find_element(By.XPATH, './/p[@class="date"]').text  # ex:"放送開始：2023/09/04 (月) 22:50:00"
+            start_at: str = re.sub(r"\s*\([^)]*\)", "", start_at)  # 曜日部分を削除
+            start_at: datetime = datetime.strptime(start_at, "放送開始：%Y/%m/%d %H:%M:%S")  # datetime型に変換
+            start_at: str = start_at.isoformat()  # ISO8601形式に変換
 
             # 生放送情報を追加
             live = NicoNicoLive(id)
@@ -215,7 +207,7 @@ class NicoNicoChannel(Platform, ScrapingMixin):
                 title=title,
                 url=url,
                 thumbnail=thumbnail,
-                start_at=actual_start_at.isoformat(),
+                start_at=start_at,
             )
             lives.append(live)
 
@@ -239,19 +231,21 @@ class NicoNicoChannel(Platform, ScrapingMixin):
             page += 1
 
             # ページを開く
-            self.driver.get(f"https://ch.nicovideo.jp/{self.id}/video?page={page}")
+            self._driver.get(f"https://ch.nicovideo.jp/{self.id}/video?page={page}")
 
             # 情報を取得
             videos.extend(self.__video_page())
 
             # 次のページがあるかどうかを確認
-            for _ in range(30):
-                next_buttons: list = self.driver.find_elements(By.XPATH, '//li[@class="next"]/a')
-                next_disableds: list = self.driver.find_elements(By.XPATH, '//li[@class="next disabled"]')
+            while True:
+                start = time.time()
+                next_buttons: list = self._driver.find_elements(By.XPATH, '//li[@class="next"]/a')
+                next_disableds: list = self._driver.find_elements(By.XPATH, '//li[@class="next disabled"]')
                 if next_buttons or next_disableds:
                     break
-            else:
-                raise  # FIXME
+                end = time.time()
+                if end - start > self._timeout:
+                    raise Exception("timeout")  # FIXME: 例外を作成する
 
         # 結果を返す
         return videos
@@ -261,12 +255,12 @@ class NicoNicoChannel(Platform, ScrapingMixin):
         item: WebElement
 
         # 投稿者の名前とIDを取得
-        icon_link: WebElement = get_matching_element(base=self.driver, tag="span", attribute="class", pattern=r"^.*thumb_wrapper_ch.*$")
+        icon_link: WebElement = get_matching_element(base=self._driver, tag="span", attribute="class", pattern=r"^.*thumb_wrapper_ch.*$")
         poster_name: str = icon_link.find_element(By.XPATH, "./a").get_attribute("title")
         poster_id: str = icon_link.find_element(By.XPATH, "./a").get_attribute("href").split("/")[-1]
 
         # アイテムを取得
-        items = WebDriverWait(self.driver, 20).until(EC.presence_of_all_elements_located((By.XPATH, '//li[@class="item"]')))
+        items = self._wait.until(EC.presence_of_all_elements_located((By.XPATH, '//li[@class="item"]')))
         # 動画情報を取得
         for item in items:
             # URL
@@ -280,6 +274,7 @@ class NicoNicoChannel(Platform, ScrapingMixin):
             # 投稿日時
             posted_at: str = item.find_element(By.XPATH, './/p[@class="time"]/time/var').get_attribute("title")
             posted_at: datetime = datetime.strptime(posted_at, "%Y/%m/%d %H:%M")
+            posted_at: str = posted_at.isoformat()
             # 再生回数
             try:
                 view_count: int = int(item.find_element(By.XPATH, './/li[@class="view "]/var').text.replace(",", ""))
@@ -308,7 +303,7 @@ class NicoNicoChannel(Platform, ScrapingMixin):
                 title=title,
                 url=url,
                 thumbnail=thumbnail,
-                posted_at=posted_at.isoformat(),
+                posted_at=posted_at,
                 view_count=view_count,
                 comment_count=comment_count,
                 my_list_count=my_list_count,
@@ -319,15 +314,13 @@ class NicoNicoChannel(Platform, ScrapingMixin):
         return videos
 
     # トップページのニュースを取得する
-    def get_news(self, limit: int = 5) -> list[NicoNicoChannel.News]:
+    def get_news(self, limit: int = 5) -> list[NicoNicoChannelNews]:
         """チャンネルのニュースコンテンツを取得"""
         newses = self.__fetch_news_feed(limit)
         return newses
 
-    def __fetch_news_feed(self, limit: int) -> list[NicoNicoChannel.News]:
+    def __fetch_news_feed(self, limit: int) -> list[NicoNicoChannelNews]:
         """チャンネルのニュースをfeedを使って取得する"""
-        newses = []
-
         # RSSフィードを取得
         feed = feedparser.parse(f"https://ch.nicovideo.jp/{self.id}/blomaga/nico/feed")
 
@@ -335,100 +328,116 @@ class NicoNicoChannel(Platform, ScrapingMixin):
         if feed["status"] > 400 or feed["bozo"] != False:
             raise Exception("feed err")  # FIXME: 例外を作成する
 
+        newses = []
         # ニュースのアイテムを取得
         for entry in feed["entries"]:
+            # ニュースID
             id = entry["id"].split("/")[-1]
+            # 投稿者ID
             poster_id = self.id
+            # 投稿者名
             poster_name = entry["id"].split("/")[-3]
+            # タイトル
             title = entry["title"]
+            # URL
             url = entry["link"]
+            # サムネイル
             thumbnail = entry["nicoch_article_thumbnail"]
+            # 投稿日時
             posted_at: datetime = datetime.strptime(entry["published"], "%a, %d %b %Y %H:%M:%S %z")  # ex:'Fri, 16 Jun 2023 12:00:00 +0900'
+            posted_at: str = posted_at.isoformat()
 
             # ニュース情報を追加
-            news = NicoNicoChannel.News(poster_id, id)
+            news = NicoNicoChannelNews(poster_id, id)
             news.set_value(
                 poster_id=poster_id,
                 poster_name=poster_name,
                 title=title,
                 url=url,
                 thumbnail=thumbnail,
-                posted_at=posted_at.isoformat(),
+                posted_at=posted_at,
             )
+
+            # リストに追加
+            newses.append(news)
+
             # 取得したアイテム数がlimitに達したらループを抜ける
             if len(newses) >= limit:
                 break
 
         return newses
 
-    @execute_time()
-    class News(News):
-        """ニュースの情報を管理するクラス"""
 
-        def __init__(self, poster_id: str, id: str) -> None:
-            """他のコンテンツと違い、ニュースはIDと投稿者IDが必要"""
-            check_channel_id(poster_id)
-            check_news_id(id)
-            super().__init__(id)
-            self.poster_id = poster_id
+@execute_time()
+class NicoNicoChannelNews(News):
+    """ニュースの情報を管理するクラス"""
 
-        @classmethod
-        def from_id(cls, poster_id: str, id: str) -> NicoNicoChannel.News:
-            """IDからニュース情報を取得する"""
-            news = cls(poster_id, id)
-            news.get_detail()
-            return news
+    def __init__(self, poster_id: str, id: str) -> None:
+        """他のコンテンツと違い、ニュースはIDと投稿者IDが必要"""
+        check_channel_id(poster_id)
+        check_news_id(id)
+        super().__init__(id)
+        self.poster_id = poster_id
 
-        def get_detail(self) -> None:
-            # ページを取得
-            res = requests.get(f"https://ch.nicovideo.jp/{self.poster_id}/blomaga/{self.id}")
+    @classmethod
+    def from_id(cls, poster_id: str, id: str) -> NicoNicoChannelNews:
+        """IDからニュース情報を取得する"""
+        news = cls(poster_id, id)
+        news.get_detail()
+        return news
 
-            # ステータスコードを確認
-            if res.status_code >= 400:
-                raise Exception("status code err")  # FIXME
+    def get_detail(self) -> None:
+        # ページを取得
+        res = requests.get(f"https://ch.nicovideo.jp/{self.poster_id}/blomaga/{self.id}")
 
-            # BS4でパース
-            soup = BeautifulSoup(res.text, "html.parser")
+        # ステータスコードを確認
+        if res.status_code >= 400:
+            raise Exception("status code err")  # FIXME
 
-            # JSON-LDタグを取得 <script type="application/ld+json">
-            json_ld = soup.find("script", type="application/ld+json").string
-            json_ld = json.loads(json_ld)[0]
+        # BS4でパース
+        soup = BeautifulSoup(res.text, "html.parser")
 
-            # 投稿者ID
-            poster_id: str = json_ld["image"]["url"].split("/")[-2]
-            # ニュースID
-            id: str = json_ld["mainEntityOfPage"].split("/")[-1]
-            # タイトル
-            title: str = json_ld["headline"]
-            # URL
-            url: str = f"https://ch.nicovideo.jp/{poster_id}/blomaga/{id}"
-            # サムネイル
-            thumbnail: str = json_ld["image"]["url"] if "image" in json_ld else ""
-            # 投稿日時
-            posted_at_text: str = json_ld["datePublished"]  # ex:"2023-09-16 19:03:00"
-            posted_at: datetime = datetime.strptime(posted_at_text, "%Y-%m-%d %H:%M:%S")
-            # 更新日時
-            if "dateModified" in json_ld:
-                updated_at_text: str = json_ld["dateModified"]  # ex:"2023-09-16 23:13:17"
-                updated_at: datetime = datetime.strptime(updated_at_text, "%Y-%m-%d %H:%M:%S")
-            else:
-                updated_at = None
-            # 内容
-            body: str = soup.find("div", attrs={"class": "main_blog_txt"}).text
+        # JSON-LDタグを取得 <script type="application/ld+json">
+        json_ld = soup.find("script", type="application/ld+json").string
+        json_ld = json.loads(json_ld)[0]
 
-            # ニュース情報を設定
-            self.poster_id = poster_id
-            self.update_value(
-                poster_id=poster_id,
-                title=title,
-                url=url,
-                thumbnail=thumbnail,
-                posted_at=posted_at.isoformat(),
-                updated_at=updated_at.isoformat() if updated_at else None,
-                body=body,
-            )
+        # 投稿者ID
+        poster_id: str = json_ld["image"]["url"].split("/")[-2]
+        # ニュースID
+        id: str = json_ld["mainEntityOfPage"].split("/")[-1]
+        # タイトル
+        title: str = json_ld["headline"]
+        # URL
+        url: str = f"https://ch.nicovideo.jp/{poster_id}/blomaga/{id}"
+        # サムネイル
+        thumbnail: str = json_ld["image"]["url"] if "image" in json_ld else ""
+        # 投稿日時
+        posted_at_text: str = json_ld["datePublished"]  # ex:"2023-09-16 19:03:00"
+        posted_at: datetime = datetime.strptime(posted_at_text, "%Y-%m-%d %H:%M:%S")
+        posted_at: str = posted_at.isoformat()
+        # 更新日時
+        if "dateModified" in json_ld:
+            updated_at_text: str = json_ld["dateModified"]  # ex:"2023-09-16 23:13:17"
+            updated_at: datetime = datetime.strptime(updated_at_text, "%Y-%m-%d %H:%M:%S")
+            updated_at: str = updated_at.isoformat()
+        else:
+            updated_at = None
+        # 内容
+        body: str = soup.find("div", attrs={"class": "main_blog_txt"}).text
 
-            return None
+        # ニュース情報を設定
+        self.poster_id = poster_id
+        self.update_value(
+            poster_id=poster_id,
+            title=title,
+            url=url,
+            thumbnail=thumbnail,
+            posted_at=posted_at,
+            updated_at=updated_at,
+            body=body,
+        )
+
+        return None
 
 
 @execute_time()
@@ -446,10 +455,10 @@ class NicoNicoLive(Live, ScrapingMixin):
     def get_detail(self) -> None:
         """生放送の詳細情報をスクレイピングで取得する"""
         # ページを開く
-        self.driver.get(f"https://live.nicovideo.jp/watch/{self.id}")
+        self._driver.get(f"https://live.nicovideo.jp/watch/{self.id}")
 
         # JSON-LDタグを取得
-        json_ld: WebElement = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, '//script[@type="application/ld+json"]')))
+        json_ld: WebElement = self._wait.until(EC.presence_of_element_located((By.XPATH, '//script[@type="application/ld+json"]')))
         json_ld: str = json_ld.get_attribute("innerHTML")
         json_ld: str = json.loads(json_ld)
 
@@ -462,7 +471,7 @@ class NicoNicoLive(Live, ScrapingMixin):
         # ユーザーIDまたはチャンネルID
         poster_id: str = author_url[-2] if author_url[-1] == "join" else author_url[-1]
         # チャンネルコンテンツか否か
-        is_channel_content: str = author_url[-1] == "join"
+        # is_channel_content: str = author_url[-1] == "join"
         # タイトル
         title: str = json_ld["publication"]["name"]
         # サムネイル
@@ -470,7 +479,7 @@ class NicoNicoLive(Live, ScrapingMixin):
         # タグ
         tags: list = json_ld["keywords"]
         # 説明文
-        description: WebElement = get_matching_element(base=self.driver, tag="div", attribute="class", pattern=r"^___description___.*$")
+        description: WebElement = get_matching_element(base=self._driver, tag="div", attribute="class", pattern=r"^___description___.*$")
         description: str = description.text
 
         # 生放送の種類を判別（放送予定、放送中、過去放送）
@@ -479,40 +488,42 @@ class NicoNicoLive(Live, ScrapingMixin):
         # 開始時間
         start_at: str = json_ld["publication"]["startDate"]
         start_at: datetime = datetime.fromisoformat(start_at)
+        start_at: str = start_at.isoformat()
 
         # 過去放送の場合
         if status == "past":
             end_at: str = json_ld["publication"]["endDate"]
             end_at: datetime = datetime.fromisoformat(end_at)
+            end_at: str = end_at.isoformat()
             duration: timedelta = end_at - start_at
             duration: int = int(duration.total_seconds())
-
-        # タイムシフトが有効な場合
-        if is_timeshift_enabled:
-            timeshift_limit_at: WebElement = get_matching_element(base=self.driver, tag="time", attribute="class", pattern=r"^___program-viewing-period-date-time___.*$")
-            timeshift_limit_at: str = timeshift_limit_at.get_attribute("datetime")
-            timeshift_limit_at: datetime = datetime.strptime(timeshift_limit_at, "%Y-%m-%d %H:%M:%S")
-
-        # 放送の開始時間、終了時間、長さ(過去放送のみ)
-        if status == "past":
-            start_at = json_ld["publication"]["startDate"]  # ISO8601形式
-            end_at = json_ld["publication"]["endDate"]
+            # タイムシフトが有効な場合
+            if is_timeshift_enabled:
+                timeshift_limit_at: WebElement = get_matching_element(base=self._driver, tag="time", attribute="class", pattern=r"^___program-viewing-period-date-time___.*$")
+                timeshift_limit_at: str = timeshift_limit_at.get_attribute("datetime")
+                timeshift_limit_at: datetime = datetime.strptime(timeshift_limit_at, "%Y-%m-%d %H:%M:%S")
+                timeshift_limit_at: str = timeshift_limit_at.isoformat()
+            else:
+                timeshift_limit_at = None
+        else:
+            end_at = None
+            duration = None
 
         # 生放送オブジェクトを作成
-        self.id = id
-        self.url = url
-        self.poster_id = poster_id
-        self.title = title
-        self.thumbnail = thumbnail
-        self.tags = tags
-        self.description = description
-        self.status = status
-        self.start_at = start_at.isoformat()
-        if status == "past":
-            self.end_at = end_at.isoformat()
-            self.duration = duration
-        if is_timeshift_enabled:
-            self.archive_enabled_at = timeshift_limit_at.isoformat()
+        live = NicoNicoLive(id)
+        live.set_value(
+            poster_id=poster_id,
+            title=title,
+            url=url,
+            thumbnail=thumbnail,
+            tags=tags,
+            description=description,
+            status=status,
+            start_at=start_at,
+            end_at=end_at,
+            duration=duration,
+            timeshift_limit_at=timeshift_limit_at,
+        )
 
         return None
 
@@ -522,11 +533,11 @@ class NicoNicoLive(Live, ScrapingMixin):
         is_timeshift_enabled: bool = False
 
         # タイムシフトの公開期間を取得
-        timeshift_element = get_matching_element(base=self.driver, tag="time", attribute="class", pattern=r"^___program-viewing-period-date-time___.*$")
+        timeshift_element = get_matching_element(base=self._driver, tag="time", attribute="class", pattern=r"^___program-viewing-period-date-time___.*$")
         # 動画上に表示されるメッセージを取得
-        message_element = get_matching_element(base=self.driver, tag="p", attribute="class", pattern=r"^___primary-message___.*$")
+        message_element = get_matching_element(base=self._driver, tag="p", attribute="class", pattern=r"^___primary-message___.*$")
         # LIVE中のボタンを取得
-        live_button: list = self.driver.find_elements(By.XPATH, '//button[@data-live-status="live"]')
+        live_button: list = self._driver.find_elements(By.XPATH, '//button[@data-live-status="live"]')
 
         # 分類
         if timeshift_element:
@@ -574,8 +585,7 @@ class NicoNicoVideo(Video):
 
         # 削除されているか
         if not root.attrib["status"] == "ok":
-            self.is_deleted = True
-            return None
+            is_deleted = True
 
         # ID
         id: str = root.find(".//video_id").text
@@ -595,6 +605,7 @@ class NicoNicoVideo(Video):
         # 公開日時
         posted_at: str = root.find(".//first_retrieve").text
         posted_at: datetime = datetime.fromisoformat(posted_at)
+        posted_at: str = posted_at.isoformat()
         # 再生時間
         length_text: str = root.find(".//length").text
         minute, second = length_text.split(":")
@@ -616,12 +627,13 @@ class NicoNicoVideo(Video):
         # 動画情報を設定
         self.id = id
         self.update_value(
+            is_deleted=is_deleted,
             poster_id=poster_id,
             poster_name=poster_name,
             title=title,
             url=url,
             thumbnail=thumbnail,
-            posted_at=posted_at.isoformat(),
+            posted_at=posted_at,
             view_count=view_count,
             comment_count=comment_count,
             my_list_count=my_list_count,

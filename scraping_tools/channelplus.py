@@ -38,45 +38,25 @@ LABEL_XPATH: str = '//span[@class="MuiChip-label MuiChip-labelSmall"]'
 class ChannelPlusChannel(Platform, ScrapingMixin):
     """ニコニコチャンネルプラスのコンテンツを取得するクラス"""
 
+    _img_load = True
+
     def __init__(self, id: str) -> None:
-        """チャンネルプラスではIDが設定できないためURLに含まれている名前を設定"""
+        """IDの代わりに名前を設定"""
         super().__init__(id)
-
-    # 画像なしで読み込むと上手くいかないためオーバーライド
-    def open_browser(self) -> None:
-        """ブラウザを開く
-
-        環境変数SCRAPING_TOOLS_HEADLESS_MODEがTrueの場合はヘッドレスモードで起動する。
-        """
-        options = webdriver.ChromeOptions()
-        options.add_argument("--no-sandbox")  # 保護機能を無効化
-        options.add_argument("--disable-gpu")  # GPUの使用を無効化
-        options.add_argument("--window-size=1920,1080")  # Windowサイズを1920x1080に設定
-        options.add_experimental_option("excludeSwitches", ["enable-logging"])  # ログを無効化
-        # options.add_argument("--blink-settings=imagesEnabled=false")  # 画像を読み込まない
-        options.add_argument("--disable-extensions")  # 拡張機能を無効化
-
-        if os.environ.get("SCRAPING_TOOLS_HEADLESS_MODE") == "True":
-            options.add_argument("--headless")
-
-        self.driver = webdriver.Chrome(options)
-        self.driver.implicitly_wait(20)
-
-        return self.driver
 
     # トップページの生放送を取得する
     def get_live(self) -> list[ChannelPlusLive]:
         """ニコニコチャンネルプラスの生放送ページから配信中の放送と放送予定を取得するメソッド"""
         # 生放送ページを開く
-        self.driver.get(f"https://nicochannel.jp/{self.id}/lives")
+        self._driver.get(f"https://nicochannel.jp/{self.id}/lives")
 
         # セクションを取得出来るまでリトライ
         start = time.time()
         while True:
-            sections: list = self.driver.find_elements(By.XPATH, f"{MAIN_XPATH}/div/div")
+            sections: list = self._driver.find_elements(By.XPATH, f"{MAIN_XPATH}/div/div")
             if len(sections) >= 2:
                 break
-            if time.time() - start > 20:
+            if time.time() - start > self._timeout:
                 raise Exception("not found sections")  # FIXME
 
         # 生放送のリストを取得
@@ -101,10 +81,8 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
         if not items:
             return []
 
-        lives = []
-        for item in items:
-            live = self.__future_item(item)
-            lives.append(live)
+        # 各アイテムから情報を取得
+        lives = [self.__future_item(item) for item in items]
 
         return lives
 
@@ -125,6 +103,24 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
         # 開始予定時刻 ex:'09/16 21:00', '今日 21:00' etc...
         start_at: WebElement = get_matching_element(base=item, tag="span", attribute="class", pattern=r"^.*MuiTypography-caption.*$")
         start_at: str = start_at.text
+        start_at: str = self.convert_future_item_start_at(start_at)
+
+        # インスタンスを作成
+        live = ChannelPlusLive(poster_id, id)
+        live.set_value(
+            poster_id=poster_id,
+            title=title,
+            url=url,
+            thumbnail=thumbnail,
+            start_at=start_at,
+            status=status,
+        )
+
+        return live
+
+    def convert_future_item_start_at(self, start_at: str) -> str:
+        """放送予定の生放送情報の開始予定時刻をISO8601形式に変換する"""
+        # start:str ex:'09/16 21:00', '今日 21:00' etc...
         try:
             start_at: datetime = datetime.strptime(start_at, "%m/%d %H:%M")
         except:
@@ -144,41 +140,31 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
             start_at: datetime = start_at.replace(year=now.year + 1)
         else:
             start_at: datetime = start_at.replace(year=now.year)
+        start_at: str = start_at.isoformat()
 
-        # インスタンスを作成
-        live = ChannelPlusLive(poster_id, id)
-        live.set_value(
-            poster_id=poster_id,
-            title=title,
-            url=url,
-            thumbnail=thumbnail,
-            start_at=start_at.isoformat(),
-            status=status,
-        )
-
-        return live
+        return start_at
 
     # トップページの動画を取得する
     def get_video(self, type_: str = "upload", limit: int = 5) -> list[ChannelPlusVideo]:
         """ニコニコチャンネルプラスの動画ページをスクレイピングする"""
         # 動画ページを開く
-        self.driver.get(f"https://nicochannel.jp/{self.id}/videos")
+        self._driver.get(f"https://nicochannel.jp/{self.id}/videos")
 
         # 指定されたタイプのボタンをクリックして遷移
         if type_ == "upload":
-            uploaded_btn = WebDriverWait(self.driver, 20).until(EC.element_to_be_clickable((By.XPATH, '//span[text()="アップロード動画"]/..')))
+            uploaded_btn = WebDriverWait(self._driver, self._timeout).until(EC.element_to_be_clickable((By.XPATH, '//span[text()="アップロード動画"]/..')))
             uploaded_btn.click()
         elif type_ == "archive":
-            archive_btn = WebDriverWait(self.driver, 20).until(EC.element_to_be_clickable((By.XPATH, '//span[text()="アーカイブ動画"]/..')))
+            archive_btn = WebDriverWait(self._driver, self._timeout).until(EC.element_to_be_clickable((By.XPATH, '//span[text()="アーカイブ動画"]/..')))
             archive_btn.click()
         elif type_ == "all":
             pass
         else:
             raise ValueError("type must be 'upload' or 'archive' or 'all'")
 
-        while True:
+        while True:  # FIXME:limitが増えた際にスクロール処理が上手くいくか不明
             # 表示されているアイテム数を取得
-            main: WebElement = self.driver.find_element(By.XPATH, MAIN_XPATH)
+            main: WebElement = self._driver.find_element(By.XPATH, MAIN_XPATH)
             items: list = get_matching_all_elements(base=main, tag="div", attribute="class", pattern=r"^.*MuiGrid-item.*$")
             # アイテムがなければ空リストを返して終了
             if not items:
@@ -188,11 +174,11 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
                 break
 
             # 最後のアイテムの位置にスクロール
-            self.driver.execute_script("arguments[0].scrollIntoView();", items[-1])
+            self._driver.execute_script("arguments[0].scrollIntoView();", items[-1])
 
             # 「すべて表示しています」というテキストがあるか確認
             try:
-                self.driver.find_element(By.XPATH, '//span[text()="すべて表示しています"]')
+                self._driver.find_element(By.XPATH, '//span[text()="すべて表示しています"]')
             except NoSuchElementException:
                 continue
             else:
@@ -218,17 +204,7 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
         thumbnail: str = item_upper.find_element(By.XPATH, ".//img").get_attribute("src")
         # 投稿日時
         posted_at: str = item_under.find_element(By.XPATH, ".//span").text  # ex:"2023/07/06", "〇日前"
-        try:
-            posted_at: datetime = datetime.strptime(posted_at, "%Y/%m/%d")
-        except:
-            if "日前" in posted_at:
-                before_days: int = int(posted_at[0])
-                posted_at: datetime = datetime.now() - timedelta(days=before_days)
-            elif "時間前" in posted_at:
-                before_hours: int = int(posted_at[0])
-                posted_at: datetime = datetime.now() - timedelta(hours=before_hours)
-            else:
-                raise Exception("invalid posted_at")  # FIXME
+        posted_at: str = self.__convert_posted_at(posted_at)
         # 動画時間
         on_iamge: list = item_upper.find_elements(By.XPATH, ".//div")  # 1つめにラベル、2つめに時間が入っている
         duration: str = on_iamge[-1].text  # ex:"00:00:00", "00:00"
@@ -248,7 +224,7 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
             title=title,
             url=url,
             thumbnail=thumbnail,
-            posted_at=posted_at.isoformat(),
+            posted_at=posted_at,
             duration=duration,
             view_count=view_count,
             comment_count=comment_count,
@@ -256,39 +232,62 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
 
         return video
 
+    def __convert_posted_at(self, posted_at: str) -> str:
+        """動画の投稿日時をISO8601形式に変換する"""
+        # posted_at:str ex:"2023/07/06", "〇日前", "〇時間前"
+        try:
+            posted_at: datetime = datetime.strptime(posted_at, "%Y/%m/%d")
+        except:
+            if "日前" in posted_at:
+                before_days: int = int(posted_at[0])
+                posted_at: datetime = datetime.now() - timedelta(days=before_days)
+            elif "時間前" in posted_at:
+                before_hours: int = int(posted_at[0])
+                posted_at: datetime = datetime.now() - timedelta(hours=before_hours)
+            else:
+                raise Exception("invalid posted_at")
+        posted_at: str = posted_at.isoformat()
+
+        return posted_at
+
     # トップページのニュースを取得する
     def get_news(self, limit: int = 1) -> list[ChannelPlusNews]:
         # ニュースページを開く
-        self.driver.get(f"https://nicochannel.jp/{self.id}/articles/news")
+        self._driver.get(f"https://nicochannel.jp/{self.id}/articles/news")
 
-        # 一番下にたどり着くまでスクロール
+        # 要素を読み込むためスクロール
         while True:
-            # 一番下までスクロール
-            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            # 表示されているアイテム数を取得
+            main: WebElement = self._driver.find_element(By.XPATH, MAIN_XPATH)
+            items: list = get_matching_all_elements(base=main, tag="div", attribute="class", pattern=r"^.*MuiPaper-rounded.*$")
+            # アイテムがなければ空リストを返して終了
+            if not items:
+                return []
+            # アイテム数が指定数以上になったら終了
+            if len(items) >= limit:
+                break
+
+            # 最後のアイテムの位置にスクロール
+            self._driver.execute_script("arguments[0].scrollIntoView();", items[-1])
+
             # 「すべて表示しています」というテキストがあるか確認
             try:
-                self.driver.find_element(By.XPATH, '//span[text()="すべて表示しています"]')
+                self._driver.find_element(By.XPATH, '//span[text()="すべて表示しています"]')
             except NoSuchElementException:
                 continue
             else:
                 break
 
-        # 上に戻る
-        self.driver.execute_script("window.scrollTo(0, 0);")
-
-        # メインの要素を取得
-        main = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, MAIN_XPATH)))
-
-        # アイテムを取得
-        items = get_matching_all_elements(base=main, tag="div", attribute="class", pattern=r"^.*MuiPaper-rounded.*$", limit=limit)
-        if not items:
-            return []
-
         # 各ニュースから情報を取得
         newses = []
         for item in items:
+            # 2秒毎にページを開くように調整
+            start = time.time()
             newses.append(self.__news_item(item))
-            time.sleep(1)  # FIXME
+            end = time.time()
+            execute_time = end - start
+            if execute_time < 2:
+                time.sleep(2 - execute_time)
 
         # 結果を返す
         return newses
@@ -305,18 +304,18 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
                 pass
 
         # 新しいタブを開く
-        current_tab = self.driver.current_window_handle
-        self.driver.switch_to.new_window("tab")
+        current_tab = self._driver.current_window_handle
+        self._driver.switch_to.new_window("tab")
         # 新しいタブに遷移するまで待機
-        while current_tab != self.driver.current_window_handle:
+        while current_tab != self._driver.current_window_handle:
             break
 
         # 情報を取得
         news = self.__news_page_in_new_tab(title)
 
         # タブを閉じて元のタブに戻る
-        self.driver.close()
-        self.driver.switch_to.window(current_tab)
+        self._driver.close()
+        self._driver.switch_to.window(current_tab)
 
         # サムネイル情報を追加
         news.update_value(thumbnail=thumbnail)
@@ -325,37 +324,27 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
 
     def __news_page_in_new_tab(self, title: str) -> ChannelPlusNews:
         # ページを開く
-        self.driver.get(f"https://nicochannel.jp/{self.id}/articles/news")
+        self._driver.get(f"https://nicochannel.jp/{self.id}/articles/news")
 
         # 対象のニュースをクリック
-        target_news = WebDriverWait(self.driver, 20).until(EC.element_to_be_clickable((By.XPATH, f'//h6[text()="{title}"]')))
+        target_news = WebDriverWait(self._driver, self._timeout).until(EC.element_to_be_clickable((By.XPATH, f'//h6[text()="{title}"]')))
         target_news.click()
 
         # ID
-        id = self.driver.current_url.split("/")[-1]
+        id = self._driver.current_url.split("/")[-1]
         # 投稿者ID
         poster_id = self.id
         # タイトル
-        title: WebElement = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, '//meta[@property="og:title"]')))
+        title: WebElement = WebDriverWait(self._driver, self._timeout).until(EC.presence_of_element_located((By.XPATH, '//meta[@property="og:title"]')))
         title: str = title.get_attribute("content")
         # URL
-        url: str = self.driver.current_url
+        url: str = self._driver.current_url
         # 投稿日時
-        posted_at: WebElement = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, f"{MAIN_XPATH}/div/div[4]/span")))
+        posted_at: WebElement = WebDriverWait(self._driver, self._timeout).until(EC.presence_of_element_located((By.XPATH, f"{MAIN_XPATH}/div/div[4]/span")))
         posted_at: str = posted_at.text  # ex:"2023/07/06","〇日前","〇時間前"
-        try:
-            posted_at: datetime = datetime.strptime(posted_at, "%Y/%m/%d")
-        except:
-            if "日前" in posted_at:
-                before_days: int = int(posted_at[0])
-                posted_at: datetime = datetime.now() - timedelta(days=before_days)
-            elif "時間前" in posted_at:
-                before_hours: int = int(posted_at[0])
-                posted_at: datetime = datetime.now() - timedelta(hours=before_hours)
-            else:
-                raise Exception("invalid posted_at")  # FIXME
+        posted_at: str = self.__convert_posted_at(posted_at)
         # 内容
-        body: WebElement = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, f"{MAIN_XPATH}/div/div[5]")))
+        body: WebElement = WebDriverWait(self._driver, self._timeout).until(EC.presence_of_element_located((By.XPATH, f"{MAIN_XPATH}/div/div[5]")))
         body: str = body.text
 
         # インスタンスを作成
@@ -364,7 +353,7 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
             poster_id=poster_id,
             title=title,
             url=url,
-            posted_at=posted_at.isoformat(),
+            posted_at=posted_at,
             body=body,
         )
 
@@ -377,45 +366,46 @@ class ChannelPlusContentMixin(ScrapingMixin):
     # TODO: ニコニコチャンネルプラスのコンテンツページをスクレイピングする
     def __content_page(self) -> dict:
         """ニコニコチャンネルプラスのコンテンツページをスクレイピングする"""
-        # コンテンツのページを開く
-        self.driver.get(f"https://nicochannel.jp/{self.poster_id}/live/{self.id}")
+        pass
+        # # コンテンツのページを開く
+        # self.driver.get(f"https://nicochannel.jp/{self.poster_id}/live/{self.id}")
 
-        # メインの要素を取得
-        main: WebElement = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, MAIN_XPATH)))
+        # # メインの要素を取得
+        # main: WebElement = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, MAIN_XPATH)))
 
-        # タイトル
-        title: str = main.find_element(By.XPATH, '//meta[@property="og:title"]').get_attribute("content")
-        # URL
-        url: str = self.driver.current_url
-        # ID
-        id: str = url.split("/")[-1]
-        # 投稿者ID
-        poster_id: str = url.split("/")[-3]
-        # サムネイル
-        thumbnail: str = main.find_element(By.XPATH, '//meta[@property="og:image"]').get_attribute("content")
-        # 説明文
-        description: str = main.find_element(By.XPATH, '//meta[@name="description"]').get_attribute("content")
+        # # タイトル
+        # title: str = main.find_element(By.XPATH, '//meta[@property="og:title"]').get_attribute("content")
+        # # URL
+        # url: str = self.driver.current_url
+        # # ID
+        # id: str = url.split("/")[-1]
+        # # 投稿者ID
+        # poster_id: str = url.split("/")[-3]
+        # # サムネイル
+        # thumbnail: str = main.find_element(By.XPATH, '//meta[@property="og:image"]').get_attribute("content")
+        # # 説明文
+        # description: str = main.find_element(By.XPATH, '//meta[@name="description"]').get_attribute("content")
 
-        # ラベルからコンテンツの種類と状態を取得
-        WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, '//div[@id="video-page-wrapper"]')))
-        labels: list = main.find_elements(By.XPATH, LABEL_XPATH)
-        for label in labels:
-            # COMING SOON
-            if label.text == "COMING SOON":
-                status: str = "future"
-            # STREAMING
-            elif label.text == "STREAMING":
-                status: str = "now"
-            else:
-                status = None
-            # 会員限定
-            if label.text == "会員限定":
-                pass
-            # 一部無料
-            if label.text == "一部無料":
-                pass
+        # # ラベルからコンテンツの種類と状態を取得
+        # WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, '//div[@id="video-page-wrapper"]')))
+        # labels: list = main.find_elements(By.XPATH, LABEL_XPATH)
+        # for label in labels:
+        #     # COMING SOON
+        #     if label.text == "COMING SOON":
+        #         status: str = "future"
+        #     # STREAMING
+        #     elif label.text == "STREAMING":
+        #         status: str = "now"
+        #     else:
+        #         status = None
+        #     # 会員限定
+        #     if label.text == "会員限定":
+        #         pass
+        #     # 一部無料
+        #     if label.text == "一部無料":
+        #         pass
 
-        return result
+        # return result
 
 
 class ChannelPlusVideo(Video, ChannelPlusContentMixin):
