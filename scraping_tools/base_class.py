@@ -3,6 +3,7 @@
 from __future__ import annotations
 from datetime import datetime, timedelta
 import re
+import json
 import os
 from pprint import pformat
 from typing import Any
@@ -141,6 +142,9 @@ class Content:
             result[attr_name] = attr_value
 
         return result
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict())
 
 
 class Video(Content):
