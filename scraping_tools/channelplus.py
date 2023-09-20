@@ -46,6 +46,13 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
 
     # トップページの生放送を取得する
     def get_live(self) -> list[ChannelPlusLive]:
+        logger.info(f"Scraping for NicoNicoChannelPlus's live page...")
+        lives = self.__live_page()
+        logger.info(f"Success scraping for NicoNicoChannelPlus's live page")
+
+        return lives
+
+    def __live_page(self) -> list[ChannelPlusLive]:
         """ニコニコチャンネルプラスの生放送ページから配信中の放送と放送予定を取得するメソッド"""
         # 生放送ページを開く
         self._driver.get(f"https://nicochannel.jp/{self.id}/lives")
@@ -103,7 +110,7 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
         # 開始予定時刻 ex:'09/16 21:00', '今日 21:00' etc...
         start_at: WebElement = get_matching_element(base=item, tag="span", attribute="class", pattern=r"^.*MuiTypography-caption.*$")
         start_at: str = start_at.text
-        start_at: str = self.convert_future_item_start_at(start_at)
+        start_at: str = self.__convert_future_item_start_at(start_at)
 
         # インスタンスを作成
         live = ChannelPlusLive(poster_id, id)
@@ -118,7 +125,8 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
 
         return live
 
-    def convert_future_item_start_at(self, start_at: str) -> str:
+    # 予定開始時刻をISO8601形式に変換する(放送予定限定)
+    def __convert_future_item_start_at(self, start_at: str) -> str:
         """放送予定の生放送情報の開始予定時刻をISO8601形式に変換する"""
         # start:str ex:'09/16 21:00', '今日 21:00' etc...
         try:
@@ -146,6 +154,13 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
 
     # トップページの動画を取得する
     def get_video(self, type_: str = "upload", limit: int = 5) -> list[ChannelPlusVideo]:
+        logger.info(f"Scraping for NicoNicoChannelPlus's video page...")
+        videos = self.__video_page(type_, limit)
+        logger.info(f"Success scraping for NicoNicoChannelPlus's video page")
+
+        return videos
+
+    def __video_page(self, type_: str, limit: int) -> list[ChannelPlusVideo]:
         """ニコニコチャンネルプラスの動画ページをスクレイピングする"""
         # 動画ページを開く
         self._driver.get(f"https://nicochannel.jp/{self.id}/videos")
@@ -232,26 +247,15 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
 
         return video
 
-    def __convert_posted_at(self, posted_at: str) -> str:
-        """動画の投稿日時をISO8601形式に変換する"""
-        # posted_at:str ex:"2023/07/06", "〇日前", "〇時間前"
-        try:
-            posted_at: datetime = datetime.strptime(posted_at, "%Y/%m/%d")
-        except:
-            if "日前" in posted_at:
-                before_days: int = int(posted_at[0])
-                posted_at: datetime = datetime.now() - timedelta(days=before_days)
-            elif "時間前" in posted_at:
-                before_hours: int = int(posted_at[0])
-                posted_at: datetime = datetime.now() - timedelta(hours=before_hours)
-            else:
-                raise Exception("invalid posted_at")
-        posted_at: str = posted_at.isoformat()
-
-        return posted_at
-
     # トップページのニュースを取得する
     def get_news(self, limit: int = 1) -> list[ChannelPlusNews]:
+        logger.info(f"Scraping for NicoNicoChannelPlus's news page...")
+        newses = self.__news_page(limit)
+        logger.info(f"Success scraping for NicoNicoChannelPlus's news page")
+
+        return newses
+
+    def __news_page(self, limit: int) -> list[ChannelPlusNews]:
         # ニュースページを開く
         self._driver.get(f"https://nicochannel.jp/{self.id}/articles/news")
 
@@ -358,6 +362,25 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
         )
 
         return news
+
+    # 投稿日時をISO8601形式に変換する(動画、ニュース共通)
+    def __convert_posted_at(self, posted_at: str) -> str:
+        """動画の投稿日時をISO8601形式に変換する"""
+        # posted_at:str ex:"2023/07/06", "〇日前", "〇時間前"
+        try:
+            posted_at: datetime = datetime.strptime(posted_at, "%Y/%m/%d")
+        except:
+            if "日前" in posted_at:
+                before_days: int = int(posted_at[0])
+                posted_at: datetime = datetime.now() - timedelta(days=before_days)
+            elif "時間前" in posted_at:
+                before_hours: int = int(posted_at[0])
+                posted_at: datetime = datetime.now() - timedelta(hours=before_hours)
+            else:
+                raise Exception("invalid posted_at")
+        posted_at: str = posted_at.isoformat()
+
+        return posted_at
 
 
 class ChannelPlusContentMixin(ScrapingMixin):

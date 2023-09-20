@@ -46,8 +46,9 @@ class NicoNicoChannel(Platform, ScrapingMixin):
 
         1ページには大体10個の生放送が含まれている（放送予定、放送中の要素がある場合は増える）
         """
-        lives = []
+        logger.info(f"Scraping for NioNicoChannel's live page...")
 
+        lives = []
         # 取得したアイテム数がlimitに達するまでループ
         page = 0
         while len(lives) < limit:
@@ -74,6 +75,8 @@ class NicoNicoChannel(Platform, ScrapingMixin):
                 end = time.time()
                 if end - start > self._timeout:
                     raise Exception("timeout")  # FIXME: 例外を作成する
+
+            logger.info(f"Success scraping for NioNicoChannel's live page.")
 
         return lives
 
@@ -217,7 +220,9 @@ class NicoNicoChannel(Platform, ScrapingMixin):
     # トップページの動画を取得する
     def get_video(self, limit: int = 20) -> list[NicoNicoVideo]:
         """ニコニコチャンネルの動画ページから一覧をスクレイピングする"""
+        logger.info(f"Scraping for NioNicoChannel's video page...")
         videos = self.__video_page_loop(limit)
+        logger.info(f"Success scraping for NioNicoChannel's video page.")
         return videos
 
     def __video_page_loop(self, limit: int) -> list[NicoNicoVideo]:
@@ -316,7 +321,9 @@ class NicoNicoChannel(Platform, ScrapingMixin):
     # トップページのニュースを取得する
     def get_news(self, limit: int = 5) -> list[NicoNicoChannelNews]:
         """チャンネルのニュースコンテンツを取得"""
+        logger.info(f"Scraping for NioNicoChannel's news page...")
         newses = self.__fetch_news_feed(limit)
+        logger.info(f"Success scraping for NioNicoChannel's news page.")
         return newses
 
     def __fetch_news_feed(self, limit: int) -> list[NicoNicoChannelNews]:
@@ -368,7 +375,6 @@ class NicoNicoChannel(Platform, ScrapingMixin):
         return newses
 
 
-@execute_time()
 class NicoNicoChannelNews(News):
     """ニュースの情報を管理するクラス"""
 
@@ -440,7 +446,6 @@ class NicoNicoChannelNews(News):
         return None
 
 
-@execute_time()
 class NicoNicoLive(Live, ScrapingMixin):
     """生放送の情報を管理するクラス"""
 
@@ -553,7 +558,6 @@ class NicoNicoLive(Live, ScrapingMixin):
         return status, is_timeshift_enabled
 
 
-@execute_time()
 class NicoNicoVideo(Video):
     """動画の情報を管理するクラス"""
 

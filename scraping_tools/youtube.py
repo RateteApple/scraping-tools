@@ -36,7 +36,9 @@ class YTChannel(Platform):
             list[dict]: コンテンツのIDとetagのリスト
         """
         # APIで情報を取得
+        logger.info(f"Channel API requesting...")
         res = self.client.search().list(channelId=self.id, part="snippet", maxResults=limit, type="video", order=order, safeSearch="none").execute()
+        logger.info(f"Success to get Channel API response")
 
         # IDとetagを取得
         contents = []
@@ -77,10 +79,12 @@ class YTChannel(Platform):
             raise TypeError("ids is not list")
 
         # APIで情報を取得
+        logger.info(f"Video API requesting...")
         snippet: dict = self.client.videos().list(id=",".join(ids), part="snippet").execute()
         statistics: dict = self.client.videos().list(id=",".join(ids), part="statistics").execute()
         streaming_details: dict = self.client.videos().list(id=",".join(ids), part="liveStreamingDetails").execute()
         content_details: dict = self.client.videos().list(id=",".join(ids), part="contentDetails").execute()
+        logger.info(f"Success to get Video API response")
 
         # # デバッグ用の出力
         # with open("snippet.json", "w", encoding="UTF-8") as f:
@@ -208,7 +212,6 @@ class YTChannel(Platform):
         return instance
 
 
-@execute_time()
 class YTVideo(Video):
     def __init__(self, id: str) -> None:
         super().__init__(id)
@@ -223,7 +226,6 @@ class YTVideo(Video):
         pass
 
 
-@execute_time()
 class YTLive(Live):
     def __init__(self, id: str) -> None:
         super().__init__(id)
