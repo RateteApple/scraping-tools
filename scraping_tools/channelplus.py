@@ -261,7 +261,7 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
         # 要素を読み込むためスクロール
         while True:
             # 表示されているアイテム数を取得
-            main: WebElement = self._driver.find_element(By.XPATH, MAIN_XPATH)
+            main: WebElement = self._wait.until(EC.presence_of_element_located((By.XPATH, MAIN_XPATH)))
             items: list = get_matching_all_elements(base=main, tag="div", attribute="class", pattern=r"^.*MuiPaper-rounded.*$")
             # アイテムがなければ空リストを返して終了
             if not items:
@@ -280,6 +280,9 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
                 continue
             else:
                 break
+
+        # アイテム数を制限
+        items = items[:limit]
 
         # 各ニュースから情報を取得
         newses = []
