@@ -26,10 +26,6 @@ class YTChannel(Platform):
     # APIクライアントを作成
     client = build("youtube", "v3", developerKey=os.environ["YOUTUBE_API_KEY"])
 
-    def __del__(self) -> None:
-        # APIクライアントを削除
-        del self.client
-
     def get_ids(self, requet_type: str = "api", limit: int = 5) -> list[dict]:
         """チャンネルのコンテンツのIDを取得するメソッド
 

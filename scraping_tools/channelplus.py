@@ -256,7 +256,7 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
         return video
 
     # トップページのニュースを取得する
-    def get_news(self, limit: int = 3) -> list[ChannelPlusNews]:
+    def get_news(self, limit: int = 1) -> list[ChannelPlusNews]:
         # ニュースページを開く
         self.driver.get(f"https://nicochannel.jp/{self.id}/articles/news")
 
