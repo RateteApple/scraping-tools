@@ -171,13 +171,15 @@ class NicoNicoChannel(Platform, ScrapingMixin):
 
             # 生放送情報を追加
             live = NicoNicoLive(id)
-            live.poster_id = poster_id
-            live.poster_name = poster_name
-            live.status = status
-            live.title = title
-            live.url = url
-            live.thumbnail = thumbnail
-            lives.append(live)
+            live.set_value(
+                poster_id=poster_id,
+                poster_name=poster_name,
+                status=status,
+                title=title,
+                url=url,
+                thumbnail=thumbnail,
+                start_at=start_at.isoformat(),
+            )
 
         # 結果を返す
         return lives
@@ -206,13 +208,15 @@ class NicoNicoChannel(Platform, ScrapingMixin):
 
             # 生放送情報を追加
             live = NicoNicoLive(id)
-            live.poster_id = poster_id
-            live.poster_name = poster_name
-            live.status = status
-            live.title = title
-            live.url = url
-            live.thumbnail = thumbnail
-            live.start_at = actual_start_at
+            live.set_value(
+                poster_id=poster_id,
+                poster_name=poster_name,
+                status=status,
+                title=title,
+                url=url,
+                thumbnail=thumbnail,
+                start_at=actual_start_at.isoformat(),
+            )
             lives.append(live)
 
         # 結果を返す
@@ -294,19 +298,22 @@ class NicoNicoChannel(Platform, ScrapingMixin):
             # 再生時間
             minute, second = item.find_element(By.XPATH, './/span[@class="badge br length"]').text.split(":")
             duration: timedelta = timedelta(minutes=int(minute), seconds=int(second))
+            duration: int = int(duration.total_seconds())
 
             # 動画情報を追加
             video = NicoNicoVideo(id)
-            video.poster_id = poster_id
-            video.poster_name = poster_name
-            video.title = title
-            video.url = url
-            video.thumbnail = thumbnail
-            video.posted_at = posted_at
-            video.view_count = view_count
-            video.comment_count = comment_count
-            video.my_list_count = my_list_count
-            video.duration = duration
+            video.set_value(
+                poster_id=poster_id,
+                poster_name=poster_name,
+                title=title,
+                url=url,
+                thumbnail=thumbnail,
+                posted_at=posted_at.isoformat(),
+                view_count=view_count,
+                comment_count=comment_count,
+                my_list_count=my_list_count,
+                duration=duration,
+            )
             videos.append(video)
 
         return videos
@@ -340,13 +347,14 @@ class NicoNicoChannel(Platform, ScrapingMixin):
 
             # ニュース情報を追加
             news = NicoNicoChannel.News(poster_id, id)
-            news.poster_name = poster_name
-            news.title = title
-            news.url = url
-            news.thumbnail = thumbnail
-            news.posted_at = posted_at
-            newses.append(news)
-
+            news.set_value(
+                poster_id=poster_id,
+                poster_name=poster_name,
+                title=title,
+                url=url,
+                thumbnail=thumbnail,
+                posted_at=posted_at.isoformat(),
+            )
             # 取得したアイテム数がlimitに達したらループを抜ける
             if len(newses) >= limit:
                 break
@@ -410,13 +418,15 @@ class NicoNicoChannel(Platform, ScrapingMixin):
 
             # ニュース情報を設定
             self.poster_id = poster_id
-            self.id = id
-            self.title = title
-            self.url = url
-            self.thumbnail = thumbnail
-            self.posted_at = posted_at
-            self.updated_at = updated_at
-            self.body = body
+            self.update_value(
+                poster_id=poster_id,
+                title=title,
+                url=url,
+                thumbnail=thumbnail,
+                posted_at=posted_at.isoformat(),
+                updated_at=updated_at.isoformat() if updated_at else None,
+                body=body,
+            )
 
             return None
 
@@ -475,6 +485,7 @@ class NicoNicoLive(Live, ScrapingMixin):
             end_at: str = json_ld["publication"]["endDate"]
             end_at: datetime = datetime.fromisoformat(end_at)
             duration: timedelta = end_at - start_at
+            duration: int = int(duration.total_seconds())
 
         # タイムシフトが有効な場合
         if is_timeshift_enabled:
@@ -496,12 +507,12 @@ class NicoNicoLive(Live, ScrapingMixin):
         self.tags = tags
         self.description = description
         self.status = status
-        self.start_at = start_at
+        self.start_at = start_at.isoformat()
         if status == "past":
-            self.end_at = end_at
+            self.end_at = end_at.isoformat()
             self.duration = duration
         if is_timeshift_enabled:
-            self.archive_enabled_at = timeshift_limit_at
+            self.archive_enabled_at = timeshift_limit_at.isoformat()
 
         return None
 
@@ -588,6 +599,7 @@ class NicoNicoVideo(Video):
         length_text: str = root.find(".//length").text
         minute, second = length_text.split(":")
         duration: timedelta = timedelta(minutes=int(minute), seconds=int(second))
+        duration: int = int(duration.total_seconds())
         # 再生数
         view_count: int = int(root.find(".//view_counter").text)
         # コメント数
@@ -603,18 +615,20 @@ class NicoNicoVideo(Video):
 
         # 動画情報を設定
         self.id = id
-        self.poster_id = poster_id
-        self.poster_name = poster_name
-        self.title = title
-        self.url = url
-        self.thumbnail = thumbnail
-        self.posted_at = posted_at
-        self.duration = duration
-        self.view_count = view_count
-        self.comment_count = comment_count
-        self.my_list_count = my_list_count
-        self.tags = tags
-        self.description = description
+        self.update_value(
+            poster_id=poster_id,
+            poster_name=poster_name,
+            title=title,
+            url=url,
+            thumbnail=thumbnail,
+            posted_at=posted_at.isoformat(),
+            view_count=view_count,
+            comment_count=comment_count,
+            my_list_count=my_list_count,
+            duration=duration,
+            tags=tags,
+            description=description,
+        )
 
         return None
 

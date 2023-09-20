@@ -69,8 +69,8 @@ class Content:
     title: str
     url: str
     thumbnail: str
-    posted_at: datetime
-    updated_at: datetime
+    posted_at: str
+    updated_at: str
     tags: list[str]
     is_deleted: bool
 
@@ -81,8 +81,8 @@ class Content:
         self.title: str = None
         self.url: str = None
         self.thumbnail: str = None
-        self.posted_at: datetime = None
-        self.updated_at: datetime = None
+        self.posted_at: str = None
+        self.updated_at: str = None
         self.tags: list[str] = []
         self.is_deleted: bool = False
 
@@ -119,14 +119,6 @@ class Content:
 
     @classmethod
     def from_dict(cls, dict: dict) -> Content:
-        # to_dictの逆変換を行う
-        for key, value in dict.items():
-            if isinstance(value, str):
-                if "_at" in key:
-                    dict[key] = datetime.fromisoformat(value)
-                elif "duration" in key:
-                    dict[key] = timedelta(seconds=int(value))
-
         # インスタンスを生成
         instance = cls(dict["id"])
 
@@ -145,16 +137,6 @@ class Content:
         # "_"から始まる属性を除外
         attributes = [attribute for attribute in attributes if not attribute.startswith("_")]
 
-        # datetimeは文字列に変換
-        for attribute in attributes:
-            if isinstance(getattr(self, attribute), datetime):
-                setattr(self, attribute, getattr(self, attribute).isoformat())
-
-        # timedeltaは文字列に変換
-        for attribute in attributes:
-            if isinstance(getattr(self, attribute), timedelta):
-                setattr(self, attribute, (getattr(self, attribute)).total_seconds())
-
         # 辞書に変換
         _dict = {attribute: getattr(self, attribute) for attribute in attributes}
 
@@ -163,7 +145,7 @@ class Content:
 
 class Video(Content):
     description: str
-    duration: timedelta
+    duration: int
     view_count: int
     like_count: int
     comment_count: int
@@ -183,12 +165,12 @@ class Video(Content):
         title: str = None,
         url: str = None,
         thumbnail: str = None,
-        posted_at: datetime = None,
-        updated_at: datetime = None,
+        posted_at: str = None,
+        updated_at: str = None,
         tags: list[str] = None,
         is_deleted: bool = None,
         description: str = None,
-        duration: timedelta = None,
+        duration: int = None,
         view_count: int = None,
         like_count: int = None,
         comment_count: int = None,
@@ -219,12 +201,12 @@ class Video(Content):
         title: str = None,
         url: str = None,
         thumbnail: str = None,
-        posted_at: datetime = None,
-        updated_at: datetime = None,
+        posted_at: str = None,
+        updated_at: str = None,
         tags: list[str] = None,
         is_deleted: bool = None,
         description: str = None,
-        duration: timedelta = None,
+        duration: int = None,
         view_count: int = None,
         like_count: int = None,
         comment_count: int = None,
@@ -251,15 +233,15 @@ class Video(Content):
 
 class Live(Content):
     description: str
-    duration: timedelta
+    duration: int
     view_count: int
     like_count: int
     comment_count: int
 
-    start_at: datetime
-    end_at: datetime
+    start_at: str
+    end_at: str
     status: str
-    archive_enabled_at: datetime
+    archive_enabled_at: str
 
     def __init__(self, id: str) -> None:
         super().__init__(id)
@@ -280,19 +262,19 @@ class Live(Content):
         title: str = None,
         url: str = None,
         thumbnail: str = None,
-        posted_at: datetime = None,
-        updated_at: datetime = None,
+        posted_at: str = None,
+        updated_at: str = None,
         tags: list[str] = None,
         is_deleted: bool = None,
         description: str = None,
-        duration: timedelta = None,
+        duration: int = None,
         view_count: int = None,
         like_count: int = None,
         comment_count: int = None,
-        start_at: datetime = None,
-        end_at: datetime = None,
+        start_at: str = None,
+        end_at: str = None,
         status: str = None,
-        archive_enabled_at: datetime = None,
+        archive_enabled_at: str = None,
     ) -> None:
         """属性を設定する
 
@@ -324,19 +306,19 @@ class Live(Content):
         title: str = None,
         url: str = None,
         thumbnail: str = None,
-        posted_at: datetime = None,
-        updated_at: datetime = None,
+        posted_at: str = None,
+        updated_at: str = None,
         tags: list[str] = None,
         is_deleted: bool = None,
         description: str = None,
-        duration: timedelta = None,
+        duration: int = None,
         view_count: int = None,
         like_count: int = None,
         comment_count: int = None,
-        start_at: datetime = None,
-        end_at: datetime = None,
+        start_at: str = None,
+        end_at: str = None,
         status: str = None,
-        archive_enabled_at: datetime = None,
+        archive_enabled_at: str = None,
     ) -> None:
         """属性を更新する
 
@@ -376,8 +358,8 @@ class News(Content):
         title: str = None,
         url: str = None,
         thumbnail: str = None,
-        posted_at: datetime = None,
-        updated_at: datetime = None,
+        posted_at: str = None,
+        updated_at: str = None,
         tags: list[str] = None,
         is_deleted: bool = None,
         body: str = None,
@@ -404,8 +386,8 @@ class News(Content):
         title: str = None,
         url: str = None,
         thumbnail: str = None,
-        posted_at: datetime = None,
-        updated_at: datetime = None,
+        posted_at: str = None,
+        updated_at: str = None,
         tags: list[str] = None,
         is_deleted: bool = None,
         body: str = None,

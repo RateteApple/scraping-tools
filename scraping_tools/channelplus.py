@@ -152,7 +152,7 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
             title=title,
             url=url,
             thumbnail=thumbnail,
-            start_at=start_at,
+            start_at=start_at.isoformat(),
             status=status,
         )
 
@@ -233,6 +233,7 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
         on_iamge: list = item_upper.find_elements(By.XPATH, ".//div")  # 1つめにラベル、2つめに時間が入っている
         duration: str = on_iamge[-1].text  # ex:"00:00:00", "00:00"
         duration: timedelta = parse_video_duration(duration)
+        duration: int = int(duration.total_seconds())
         # 再生数
         view_count: WebElement = item_under.find_element(By.XPATH, "./div/div/div[1]/div")
         view_count: int = int(view_count.text)
@@ -247,7 +248,7 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
             title=title,
             url=url,
             thumbnail=thumbnail,
-            posted_at=posted_at,
+            posted_at=posted_at.isoformat(),
             duration=duration,
             view_count=view_count,
             comment_count=comment_count,
@@ -363,7 +364,7 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
             poster_id=poster_id,
             title=title,
             url=url,
-            posted_at=posted_at,
+            posted_at=posted_at.isoformat(),
             body=body,
         )
 

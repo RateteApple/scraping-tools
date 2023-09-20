@@ -176,6 +176,7 @@ class YTChannel(Platform):
                 start_at = datetime.fromisoformat(item["liveStreamingDetails"]["actualStartTime"])
                 end_at = datetime.fromisoformat(item["liveStreamingDetails"]["actualEndTime"])
                 duration: timedelta = isodate.parse_duration(item["contentDetails"]["duration"])
+                duration: int = int(duration.total_seconds())
 
             # インスタンスに情報を追加
             instance.set_value(
@@ -184,7 +185,7 @@ class YTChannel(Platform):
                 title=title,
                 url=url,
                 thumbnail=thumbnail,
-                posted_at=posted_at,
+                posted_at=posted_at.isoformat(),
                 tags=tags,
                 is_deleted=False,  # FIXME
                 description=description,
@@ -192,15 +193,16 @@ class YTChannel(Platform):
                 view_count=view_count,
                 like_count=like_count,
                 comment_count=comment_count,
-                start_at=start_at,
-                end_at=end_at,
+                start_at=start_at.isoformat(),
+                end_at=end_at.isoformat() if end_at else None,
                 status=status,
             )
 
         # 動画
         else:
             instance = YTVideo(id)
-            duration = isodate.parse_duration(item["contentDetails"]["duration"])
+            duration: timedelta = isodate.parse_duration(item["contentDetails"]["duration"])
+            duration: int = int(duration.total_seconds())
             # インスタンスに情報を追加
             instance.set_value(
                 poster_id=poster_id,
@@ -208,7 +210,7 @@ class YTChannel(Platform):
                 title=title,
                 url=url,
                 thumbnail=thumbnail,
-                posted_at=posted_at,
+                posted_at=posted_at.isoformat(),
                 tags=tags,
                 is_deleted=False,  # FIXME
                 description=description,
