@@ -77,8 +77,33 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
         return lives
 
     def __get_from_now_section(self, now_section: WebElement) -> list[ChannelPlusLive]:
-        # TODO
-        return []
+        # item Xpath "//*[@id="app-layout"]/div[2]/div[1]/div/div[1]/div/div/a"
+        item = get_matching_element(base=now_section, tag="a", attribute="class", pattern=r"^MuiButtonBase-root MuiCardActionArea-root.*$")
+
+        # 状態
+        status: str = "now"
+        # URL
+        url: str = item.get_attribute("href")
+        # ID
+        id: str = url.split("/")[-1]
+        # 投稿者ID
+        poster_id: str = url.split("/")[-3]
+        # タイトル
+        title: str = item.find_element(By.XPATH, ".//h6").text
+        # サムネイル
+        thumbnail: str = item.find_element(By.XPATH, "div[1]").get_attribute("style")
+        thumbnail: str = re.search(r"https.*(\d+)", thumbnail).group()
+
+        # インスタンスを作成
+        live = ChannelPlusLive(poster_id, id)
+        live.set_value(
+            title=title,
+            url=url,
+            thumbnail=thumbnail,
+            status=status,
+        )
+
+        return [live]
 
     def __get_from_future_section(self, future_section: WebElement) -> list[ChannelPlusLive]:
         """放送予定の生放送情報を取得する"""
@@ -114,7 +139,6 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
         # インスタンスを作成
         live = ChannelPlusLive(poster_id, id)
         live.set_value(
-            poster_id=poster_id,
             title=title,
             url=url,
             thumbnail=thumbnail,
