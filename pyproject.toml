@@ -1,6 +1,6 @@
 [project]
 name = "scraping_tools"
-version = "0.5.18"
+version = "0.5.19"
 description = "スクレイピング処理を行うスクリプト群"
 dynamic = ["dependencies"]
 [tool.setuptools.dynamic]
