@@ -283,13 +283,6 @@ class Live(Content):
         self.status = None
         self.archive_enabled_at = None
 
-    def __getattribute__(self, name: str) -> None:
-        # 終了時間が設定されていない場合は開始時間+1時間を設定する
-        if name == "end_at" and self.start_at is not None and self.end_at is None:
-            self.end_at: datetime = datetime.fromisoformat(self.start_at) + timedelta(hours=1)
-            self.end_at: str = self.end_at.isoformat()
-            return self.end_at
-
     def set_value(
         self,
         poster_id: str = None,
