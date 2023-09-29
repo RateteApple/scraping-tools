@@ -6,6 +6,8 @@ import json
 import feedparser
 import os
 from datetime import datetime, timedelta
+import requests
+from bs4 import BeautifulSoup, Tag
 
 from googleapiclient.discovery import build
 import isodate
@@ -209,6 +211,37 @@ class YTChannel(Platform):
 
         # インスタンスを返す
         return instance
+
+    # ハンドルからチャンネルIDを取得
+    @staticmethod
+    def search_channel_id(handle: str) -> str:
+        """ハンドルからチャンネルIDを取得するメソッド
+
+        Args:
+            handle (str): ハンドル
+
+        Returns:
+            str: チャンネルID
+        """
+        # URLを作成
+        url = f"https://www.youtube.com/{handle}"
+
+        # HTTPリクエストで情報を取得
+        logger.info(f"Requesting {url}...")
+        res = requests.get(url)
+        if res.status_code >= 400:
+            raise Exception(f"Failed to get {url}")
+        else:
+            logger.info(f"Success to get {url}")
+
+        # soupを作成
+        soup = BeautifulSoup(res.text, "html.parser")
+        # itemprop="url"のlinkを取得
+        link: Tag = soup.find("link", itemprop="url")
+        # linkからchannel_idを取得
+        channel_id = link["href"].split("/")[-1]
+
+        return channel_id
 
 
 class YTVideo(Video):
