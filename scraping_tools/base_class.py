@@ -78,6 +78,7 @@ class Content:
     id: str
     poster_id: str
     poster_name: str
+    poster_url: str
     title: str
     url: str
     thumbnail: str
@@ -90,6 +91,7 @@ class Content:
         self.id: str = id
         self.poster_id: str = None
         self.poster_name: str = None
+        self.poster_url: str = None
         self.title: str = None
         self.url: str = None
         self.thumbnail: str = None
@@ -190,6 +192,7 @@ class Video(Content):
         self,
         poster_id: str = None,
         poster_name: str = None,
+        poster_url: str = None,
         title: str = None,
         url: str = None,
         thumbnail: str = None,
@@ -209,6 +212,7 @@ class Video(Content):
         """
         self.poster_id = poster_id
         self.poster_name = poster_name
+        self.poster_url = poster_url
         self.title = title
         self.url = url
         self.thumbnail = thumbnail
@@ -226,6 +230,7 @@ class Video(Content):
         self,
         poster_id: str = None,
         poster_name: str = None,
+        poster_url: str = None,
         title: str = None,
         url: str = None,
         thumbnail: str = None,
@@ -245,6 +250,7 @@ class Video(Content):
         """
         self.poster_id = poster_id if poster_id is not None else self.poster_id
         self.poster_name = poster_name if poster_name is not None else self.poster_name
+        self.poster_url = poster_url if poster_url is not None else self.poster_url
         self.title = title if title is not None else self.title
         self.url = url if url is not None else self.url
         self.thumbnail = thumbnail if thumbnail is not None else self.thumbnail
@@ -287,6 +293,7 @@ class Live(Content):
         self,
         poster_id: str = None,
         poster_name: str = None,
+        poster_url: str = None,
         title: str = None,
         url: str = None,
         thumbnail: str = None,
@@ -310,6 +317,7 @@ class Live(Content):
         """
         self.poster_id = poster_id
         self.poster_name = poster_name
+        self.poster_url = poster_url
         self.title = title
         self.url = url
         self.thumbnail = thumbnail
@@ -331,6 +339,7 @@ class Live(Content):
         self,
         poster_id: str = None,
         poster_name: str = None,
+        poster_url: str = None,
         title: str = None,
         url: str = None,
         thumbnail: str = None,
@@ -354,6 +363,7 @@ class Live(Content):
         """
         self.poster_id = poster_id if poster_id is not None else self.poster_id
         self.poster_name = poster_name if poster_name is not None else self.poster_name
+        self.poster_url = poster_url if poster_url is not None else self.poster_url
         self.title = title if title is not None else self.title
         self.url = url if url is not None else self.url
         self.thumbnail = thumbnail if thumbnail is not None else self.thumbnail
@@ -383,6 +393,7 @@ class News(Content):
         self,
         poster_id: str = None,
         poster_name: str = None,
+        poster_url: str = None,
         title: str = None,
         url: str = None,
         thumbnail: str = None,
@@ -398,6 +409,7 @@ class News(Content):
         """
         self.poster_id = poster_id
         self.poster_name = poster_name
+        self.poster_url = poster_url
         self.title = title
         self.url = url
         self.thumbnail = thumbnail
@@ -411,6 +423,7 @@ class News(Content):
         self,
         poster_id: str = None,
         poster_name: str = None,
+        poster_url: str = None,
         title: str = None,
         url: str = None,
         thumbnail: str = None,
@@ -426,6 +439,7 @@ class News(Content):
         """
         self.poster_id = poster_id if poster_id is not None else self.poster_id
         self.poster_name = poster_name if poster_name is not None else self.poster_name
+        self.poster_url = poster_url if poster_url is not None else self.poster_url
         self.title = title if title is not None else self.title
         self.url = url if url is not None else self.url
         self.thumbnail = thumbnail if thumbnail is not None else self.thumbnail

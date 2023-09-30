@@ -80,140 +80,141 @@ class NicoNicoChannel(Platform, ScrapingMixin):
         return lives
 
     def __live_page(self, now: bool, future: bool, past: bool) -> list[NicoNicoLive]:
-        lives = []
+        def get_now_section(section: WebElement) -> list[NicoNicoLive]:
+            item: WebElement
+            status = "now"
+            lives = []
 
+            # アイテム要素を取得
+            items: list = section.find_elements(By.XPATH, './/div[@id="live_now"]/div[@id="live_now_cnt"]/ul/li[@class="item"]')
+            # アイテムから情報を取得
+            for item in items:
+                # タイトル
+                title = item.find_element(By.XPATH, './/p[@class="title"]').text
+                # URL
+                url = item.find_element(By.XPATH, './/p[@class="title"]/a').get_attribute("href")
+                # ID
+                id = url.split("/")[-1]
+                # サムネイル
+                thumbnail = item.find_element(By.XPATH, ".//img").get_attribute("src")
+
+                # 生放送情報を追加
+                live = NicoNicoLive(id)
+                live.set_value(
+                    poster_id=poster_id,
+                    poster_name=poster_name,
+                    poster_url=poster_url,
+                    status=status,
+                    title=title,
+                    url=url,
+                    thumbnail=thumbnail,
+                )
+
+            # 結果を返す
+            return lives
+
+        def get_future_section(section: WebElement) -> list[NicoNicoLive]:
+            item: WebElement
+            status = "future"
+            lives = []
+
+            # アイテム要素を取得
+            items: list = section.find_elements(By.XPATH, './/li[@class="item"]')
+            for item in items:
+                # タイトル
+                title: str = item.find_element(By.XPATH, './/h2[@class="title"]').text
+                # URL
+                url: str = item.find_element(By.XPATH, ".//h2[@class='title']/a").get_attribute("href")
+                # ID
+                id: str = url.split("/")[-1]
+                # サムネイル
+                thumbnail: str = item.find_element(By.XPATH, ".//img").get_attribute("src")
+                # 開始日時
+                start_at: str = item.find_element(By.XPATH, './/p[@class="date"]/strong').text  # ex:"09月23日 (土) 22時00分"
+                start_at: str = re.sub(r"\s*\([^)]*\)", "", start_at)  # 曜日部分を削除 ex:"09月23日 (土) 22時00分" -> "09月23日 22時00分"
+                start_at: datetime = datetime.strptime(start_at, "%m月%d日 %H時%M分")  # datetime型に変換
+                now = datetime.now()
+                if datetime.now().month > start_at.month:  # 月をまたいでいる場合は来年の月にする
+                    start_at = start_at.replace(year=now.year + 1)
+                else:
+                    start_at = start_at.replace(year=now.year)
+                start_at: str = start_at.isoformat()  # ISO8601形式に変換
+
+                # 生放送情報を追加
+                live = NicoNicoLive(id)
+                live.set_value(
+                    poster_id=poster_id,
+                    poster_name=poster_name,
+                    poster_url=poster_url,
+                    status=status,
+                    title=title,
+                    url=url,
+                    thumbnail=thumbnail,
+                    start_at=start_at,
+                )
+
+            # 結果を返す
+            return lives
+
+        def get_past_section(section: WebElement) -> list[NicoNicoLive]:
+            item: WebElement
+            status = "past"
+            lives = []
+            # アイテム要素を取得
+            items: list = section.find_elements(By.XPATH, './/li[@class="item"]')
+            # アイテムから情報を取得
+            for item in items:
+                # タイトル
+                title = item.find_element(By.XPATH, ".//h2").text
+                # URL
+                url = item.find_element(By.XPATH, ".//h2/a").get_attribute("href")
+                # ID
+                id = url.split("/")[-1]
+                # サムネイル
+                thumbnail = item.find_element(By.XPATH, ".//img").get_attribute("src")
+                # 開始日時
+                start_at: str = item.find_element(By.XPATH, './/p[@class="date"]').text  # ex:"放送開始：2023/09/04 (月) 22:50:00"
+                start_at: str = re.sub(r"\s*\([^)]*\)", "", start_at)  # 曜日部分を削除
+                start_at: datetime = datetime.strptime(start_at, "放送開始：%Y/%m/%d %H:%M:%S")  # datetime型に変換
+                start_at: str = start_at.isoformat()  # ISO8601形式に変換
+
+                # 生放送情報を追加
+                live = NicoNicoLive(id)
+                live.set_value(
+                    poster_id=poster_id,
+                    poster_name=poster_name,
+                    poster_url=poster_url,
+                    status=status,
+                    title=title,
+                    url=url,
+                    thumbnail=thumbnail,
+                    start_at=start_at,
+                )
+                lives.append(live)
+
+            # 結果を返す
+            return lives
+
+        lives = []
         # 投稿者の名前とIDを取得
         icon_link: WebElement = get_matching_element(base=self._driver, tag="span", attribute="class", pattern=r"^.*thumb_wrapper_ch.*$")
         poster_name: str = icon_link.find_element(By.XPATH, "./a").get_attribute("title")
         poster_id: str = icon_link.find_element(By.XPATH, "./a").get_attribute("href").split("/")[-1]
+        poster_url: str = f"https://ch.nicovideo.jp/{poster_id}"
 
         # 放送中
         if now:
             now_section: WebElement = self._wait.until(EC.presence_of_element_located((By.XPATH, '//section[@class="sub now"]')))
-            lives.extend(self.__now_section(now_section, poster_id, poster_name))
+            lives.extend(get_now_section(now_section))
         # 放送予定
         if future:
             future_section: WebElement = self._wait.until(EC.presence_of_element_located((By.XPATH, '//section[@class="sub future"]')))
-            lives.extend(self.__future_section(future_section, poster_id, poster_name))
+            lives.extend(get_future_section(future_section))
         # 過去放送
         if past:
             past_section: WebElement = self._wait.until(EC.presence_of_element_located((By.XPATH, '//section[@class="sub past"]')))
-            lives.extend(self.__past_section(past_section, poster_id, poster_name))
+            lives.extend(get_past_section(past_section))
 
-        return lives
-
-    def __now_section(self, section: WebElement, poster_id: str, poster_name: str) -> list[NicoNicoLive]:
-        lives = []
-        item: WebElement
-        # アイテム要素を取得
-        items: list = section.find_elements(By.XPATH, './/div[@id="live_now"]/div[@id="live_now_cnt"]/ul/li[@class="item"]')
-        # アイテムから情報を取得
-        for item in items:
-            # 状態
-            status = "now"
-            # タイトル
-            title = item.find_element(By.XPATH, './/p[@class="title"]').text
-            # URL
-            url = item.find_element(By.XPATH, './/p[@class="title"]/a').get_attribute("href")
-            # ID
-            id = url.split("/")[-1]
-            # サムネイル
-            thumbnail = item.find_element(By.XPATH, ".//img").get_attribute("src")
-
-            # 生放送情報を追加
-            live = NicoNicoLive(id)
-            live.set_value(
-                poster_id=poster_id,
-                poster_name=poster_name,
-                status=status,
-                title=title,
-                url=url,
-                thumbnail=thumbnail,
-            )
-
-        # 結果を返す
-        return lives
-
-    def __future_section(self, section: WebElement, poster_id: str, poster_name: str) -> list[NicoNicoLive]:
-        lives = []
-        item: WebElement
-
-        # アイテム要素を取得
-        items: list = section.find_elements(By.XPATH, './/li[@class="item"]')
-        for item in items:
-            # 状態
-            status = "future"
-            # タイトル
-            title: str = item.find_element(By.XPATH, './/h2[@class="title"]').text
-            # URL
-            url: str = item.find_element(By.XPATH, ".//h2[@class='title']/a").get_attribute("href")
-            # ID
-            id: str = url.split("/")[-1]
-            # サムネイル
-            thumbnail: str = item.find_element(By.XPATH, ".//img").get_attribute("src")
-            # 開始日時
-            start_at: str = item.find_element(By.XPATH, './/p[@class="date"]/strong').text  # ex:"09月23日 (土) 22時00分"
-            start_at: str = re.sub(r"\s*\([^)]*\)", "", start_at)  # 曜日部分を削除 ex:"09月23日 (土) 22時00分" -> "09月23日 22時00分"
-            start_at: datetime = datetime.strptime(start_at, "%m月%d日 %H時%M分")  # datetime型に変換
-            now = datetime.now()
-            if datetime.now().month > start_at.month:  # 月をまたいでいる場合は来年の月にする
-                start_at = start_at.replace(year=now.year + 1)
-            else:
-                start_at = start_at.replace(year=now.year)
-            start_at: str = start_at.isoformat()  # ISO8601形式に変換
-
-            # 生放送情報を追加
-            live = NicoNicoLive(id)
-            live.set_value(
-                poster_id=poster_id,
-                poster_name=poster_name,
-                status=status,
-                title=title,
-                url=url,
-                thumbnail=thumbnail,
-                start_at=start_at,
-            )
-
-        # 結果を返す
-        return lives
-
-    def __past_section(self, section: WebElement, poster_id: str, poster_name: str) -> list[NicoNicoLive]:
-        lives = []
-        item: WebElement
-        # アイテム要素を取得
-        items: list = section.find_elements(By.XPATH, './/li[@class="item"]')
-        # アイテムから情報を取得
-        for item in items:
-            # 状態
-            status = "past"
-            # タイトル
-            title = item.find_element(By.XPATH, ".//h2").text
-            # URL
-            url = item.find_element(By.XPATH, ".//h2/a").get_attribute("href")
-            # ID
-            id = url.split("/")[-1]
-            # サムネイル
-            thumbnail = item.find_element(By.XPATH, ".//img").get_attribute("src")
-            # 開始日時
-            start_at: str = item.find_element(By.XPATH, './/p[@class="date"]').text  # ex:"放送開始：2023/09/04 (月) 22:50:00"
-            start_at: str = re.sub(r"\s*\([^)]*\)", "", start_at)  # 曜日部分を削除
-            start_at: datetime = datetime.strptime(start_at, "放送開始：%Y/%m/%d %H:%M:%S")  # datetime型に変換
-            start_at: str = start_at.isoformat()  # ISO8601形式に変換
-
-            # 生放送情報を追加
-            live = NicoNicoLive(id)
-            live.set_value(
-                poster_id=poster_id,
-                poster_name=poster_name,
-                status=status,
-                title=title,
-                url=url,
-                thumbnail=thumbnail,
-                start_at=start_at,
-            )
-            lives.append(live)
-
-        # 結果を返す
         return lives
 
     # トップページの動画を取得する

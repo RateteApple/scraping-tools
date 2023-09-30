@@ -121,6 +121,8 @@ class YTChannel(Platform):
         posted_at: str = posted_at.isoformat()
         # 投稿者ID
         poster_id = item["snippet"]["channelId"]
+        # 投稿者URL
+        poster_url = f"https://www.youtube.com/channel/{poster_id}"
         # タイトル
         title = item["snippet"]["title"]
         # 説明文
@@ -171,6 +173,7 @@ class YTChannel(Platform):
             instance.set_value(
                 poster_id=poster_id,
                 poster_name=poster_name,
+                poster_url=poster_url,
                 title=title,
                 url=url,
                 thumbnail=thumbnail,
@@ -196,6 +199,7 @@ class YTChannel(Platform):
             instance.set_value(
                 poster_id=poster_id,
                 poster_name=poster_name,
+                poster_url=poster_url,
                 title=title,
                 url=url,
                 thumbnail=thumbnail,
