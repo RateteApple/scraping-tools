@@ -373,6 +373,40 @@ class NicoNicoChannel(Platform, ScrapingMixin):
 
         return newses
 
+    # ハンドルからチャンネルIDを取得する
+    @staticmethod
+    def search_channel_id(handle: str) -> str:
+        """ハンドルからチャンネルIDを取得するメソッド
+
+        Args:
+            handle (str): ハンドル
+
+        Returns:
+            str: チャンネルID
+        """
+        # URLを作成
+        url = f"https://ch.nicovideo.jp/{handle}"
+
+        # ページを取得
+        res = requests.get(url)
+
+        # ステータスコードを確認
+        if res.status_code > 400:
+            raise Exception("status code err")  # FIXME: 例外を作成する
+
+        # BS4でパース
+        soup = BeautifulSoup(res.text, "html.parser")
+
+        # チャンネルIDを取得
+        channel_id = soup.find("meta", attrs={"property": "og:url"}).get("content").split("/")[-1]
+
+        # 「ご意見・ご要望」というテキストを持つaタグからチャンネルIDを取得
+        a_tag = soup.find("a", text="ご意見・ご要望はこちら")
+        href = a_tag.get("href")
+        channel_id = href.split("/")[-1]
+
+        return channel_id
+
 
 class NicoNicoChannelNews(News):
     """ニュースの情報を管理するクラス"""
