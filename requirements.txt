@@ -10,6 +10,7 @@ google-api-python-client==2.100.0
 
 # data processing
 isodate==0.6.1
+Pillow==10.0.1
 
 # DEBUG
 my-utilities @ git+https://github.com/RateteApple/my-utilities.git

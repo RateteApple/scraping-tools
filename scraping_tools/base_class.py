@@ -5,6 +5,9 @@ from datetime import datetime, timedelta
 import re
 import json
 import os
+import io
+from PIL import Image
+import requests
 from pprint import pformat
 from typing import Any
 import unicodedata
@@ -171,6 +174,37 @@ class Content:
                 diff.append({attribute: (getattr(self, attribute), getattr(other, attribute))})
 
         return diff
+
+    def get_thumbnail(self, *, size: tuple[int, int] = None) -> io.BytesIO:
+        """URLからサムネイルを取得してバイナリで返す"""
+        # サムネイルが存在する場合はそのまま返す
+        if self.thumbnail is None:
+            raise ValueError("サムネイルが設定されていません。")
+
+        # サムネイルを取得
+        res = requests.get(self.thumbnail)
+
+        # リスポンスが200以外の場合は例外を発生
+        if res.status_code != 200:
+            raise Exception(f"Failed to get thumbnail. status_code: {res.status_code}")
+
+        # widthとheightが指定されている場合はリサイズ
+        if size is not None:
+            # PIL.Imageに変換
+            img = Image.open(io.BytesIO(res.content))
+
+            # リサイズ
+            resized_img = img.resize(size)
+
+            # io.bytesIOに変換
+            img_bytes = io.BytesIO()
+            resized_img.save(img_bytes, format="PNG")
+            img_bytes = img_bytes.getvalue()  # これが bytes
+
+        else:
+            img_bytes = res.content
+
+        return img_bytes
 
 
 class Video(Content):
