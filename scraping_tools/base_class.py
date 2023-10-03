@@ -175,7 +175,7 @@ class Content:
 
         return diff
 
-    def get_thumbnail(self, *, size: tuple[int, int] = None) -> io.BytesIO:
+    def get_thumbnail(self, *, size: tuple[int, int] = None) -> bytes:
         """URLからサムネイルを取得してバイナリで返す"""
         # サムネイルが存在する場合はそのまま返す
         if self.thumbnail is None:
@@ -196,10 +196,10 @@ class Content:
             # リサイズ
             resized_img = img.resize(size)
 
-            # io.bytesIOに変換
+            # bytes型に変換
             img_bytes = io.BytesIO()
             resized_img.save(img_bytes, format="PNG")
-            img_bytes = img_bytes.getvalue()  # これが bytes
+            img_bytes = img_bytes.getvalue()
 
         else:
             img_bytes = res.content
