@@ -175,7 +175,7 @@ class Content:
 
         return diff
 
-    def get_thumbnail(self, *, size: tuple[int, int] = None) -> bytes:
+    def get_thumbnail(self, *, width: int = None, height: int = None) -> io.BytesIO:
         """URLからサムネイルを取得してバイナリで返す"""
         # サムネイルが存在する場合はそのまま返す
         if self.thumbnail is None:
@@ -188,21 +188,23 @@ class Content:
         if res.status_code != 200:
             raise Exception(f"Failed to get thumbnail. status_code: {res.status_code}")
 
-        # widthとheightが指定されている場合はリサイズ
-        if size is not None:
-            # PIL.Imageに変換
-            img = Image.open(io.BytesIO(res.content))
+        # PIL.Imageに変換
+        img = Image.open(io.BytesIO(res.content))
 
-            # リサイズ
-            resized_img = img.resize(size)
+        # リサイズ
+        if width and height:
+            img = img.resize((width, height))
+        elif width:
+            img = img.resize((width, int(img.height * (width / img.width))))
+        elif height:
+            img = img.resize((int(img.width * (height / img.height)), height))
+        elif not width and not height:
+            pass
 
-            # bytes型に変換
-            img_bytes = io.BytesIO()
-            resized_img.save(img_bytes, format="PNG")
-            img_bytes = img_bytes.getvalue()
-
-        else:
-            img_bytes = res.content
+        # io.BytesIOに変換
+        img_bytes = io.BytesIO()
+        img.save(img_bytes, format="PNG")
+        img_bytes.seek(0)
 
         return img_bytes
 

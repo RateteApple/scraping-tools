@@ -450,7 +450,7 @@ class ChannelPlusChannel(Platform, ScrapingMixin):
     def get_poster_name(self) -> str:
         """投稿者名を取得する"""
         # フッターを取得
-        footer: WebElement = self._driver.find_element(By.XPATH, FOOTER_XPATH)
+        footer: WebElement = WebDriverWait(self._driver, self._timeout).until(EC.presence_of_element_located((By.XPATH, FOOTER_XPATH)))
         poster_name: str = footer.find_element(By.XPATH, ".//h6").text
 
         return poster_name
