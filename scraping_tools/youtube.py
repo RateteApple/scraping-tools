@@ -10,9 +10,9 @@ import requests
 from bs4 import BeautifulSoup, Tag
 
 from googleapiclient.discovery import build
+import googleapiclient.discovery
 import isodate
 
-from my_utilities.debug import execute_time
 from .base_class import Platform, Live, Video
 
 
@@ -25,7 +25,7 @@ class YTChannel(Platform):
     """YouTubeAPIのヘルパークラス"""
 
     # APIクライアントを作成
-    client = build("youtube", "v3", developerKey=os.environ["YOUTUBE_API_KEY"])
+    client: googleapiclient.discovery.Resource = build("youtube", "v3", developerKey=os.environ["YOUTUBE_API_KEY"])
 
     def get_from_api(self, limit: int = 5, order: str = "date") -> list[dict]:
         """チャンネルのコンテンツを取得するメソッド
@@ -156,7 +156,7 @@ class YTChannel(Platform):
                 end_at = None
                 duration = None
             # 放送予定
-            elif "scheduledStartTime" in item["liveStreamingDetails"]:
+            if item["liveStreamingDetails"]["actualStartTime"] == None:
                 status = "future"
                 start_at = item["liveStreamingDetails"]["scheduledStartTime"]
                 end_at = None
