@@ -75,7 +75,7 @@ class NicoNicoChannel(Platform, ScrapingMixin):
                 if end - start > self._timeout:
                     raise Exception("timeout")  # FIXME: 例外を作成する
 
-            logger.info(f"Success scraping for NioNicoChannel's live page.")
+        logger.info(f"Success scraping for NioNicoChannel's live page.")
 
         return lives
 
