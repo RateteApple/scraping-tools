@@ -25,4 +25,10 @@ __all__ = [
     "YTChannel",
     "YTLive",
     "YTVideo",
+    "ScrapingMixin",
+    "Platform",
+    "Content",
+    "Live",
+    "Video",
+    "News",
 ]

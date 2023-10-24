@@ -50,7 +50,8 @@ class NicoNicoChannel(Platform, ScrapingMixin):
         lives = []
         # 取得したアイテム数がlimitに達するまでループ
         page = 0
-        while len(lives) < limit:
+        enable_next = True
+        while len(lives) < limit and enable_next:
             # ページカウントを進める
             page += 1
 
@@ -69,11 +70,15 @@ class NicoNicoChannel(Platform, ScrapingMixin):
                 start = time.time()
                 next_buttons: list = self._driver.find_elements(By.XPATH, '//li[@class="next"]/a')
                 next_disableds: list = self._driver.find_elements(By.XPATH, '//li[@class="next disabled"]')
+                # どちらかの要素が見つかったらループを抜ける
                 if next_buttons or next_disableds:
                     break
                 end = time.time()
                 if end - start > self._timeout:
                     raise Exception("timeout")  # FIXME: 例外を作成する
+            # 次のページがない場合、フラグをFalseにする
+            if next_disableds:
+                enable_next = False
 
         logger.info(f"Success scraping for NioNicoChannel's live page.")
 
