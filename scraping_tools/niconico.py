@@ -234,9 +234,9 @@ class NicoNicoChannel(Platform, ScrapingMixin):
         """ニコニコチャンネルの動画ページから一覧をスクレイピングする"""
         videos = []
 
-        # 取得したアイテム数がlimitに達するまでループ
         page = 0
-        while len(videos) < limit:
+        enable_next = True
+        while len(videos) < limit and enable_next:
             # ページカウントを進める
             page += 1
 
@@ -256,6 +256,9 @@ class NicoNicoChannel(Platform, ScrapingMixin):
                 end = time.time()
                 if end - start > self._timeout:
                     raise Exception("timeout")  # FIXME: 例外を作成する
+            # 次のページがない場合、フラグをFalseにする
+            if next_disableds:
+                enable_next = False
 
         # 結果を返す
         return videos
