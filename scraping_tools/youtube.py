@@ -146,28 +146,29 @@ class YTChannel(Platform):
         url = f"https://www.youtube.com/watch?v={id}"
 
         # 生放送
+        # 生放送 "liveStreamingDetails"が存在する場合
         if "liveStreamingDetails" in item:
             instance = YTLive(id)
 
-            # 放送中
+            # 配信中 "liveBroadcastContent"の値が"live"の場合
             if item["snippet"]["liveBroadcastContent"] == "live":
                 status = "now"
                 start_at = item["liveStreamingDetails"]["actualStartTime"]
                 end_at = None
                 duration = None
-            # 放送予定
-            if item["liveStreamingDetails"]["actualStartTime"] == None:
-                status = "future"
-                start_at = item["liveStreamingDetails"]["scheduledStartTime"]
-                end_at = None
-                duration = None
-            # 放送済み
-            else:
+            # 放送済み "acutalEndTime"が存在する場合
+            elif "actualEndTime" in item["liveStreamingDetails"]:
                 status = "past"
                 start_at = item["liveStreamingDetails"]["actualStartTime"]
                 end_at = item["liveStreamingDetails"]["actualEndTime"]
                 duration: timedelta = isodate.parse_duration(item["contentDetails"]["duration"])
                 duration: int = int(duration.total_seconds())
+            # 放送予定 上記のどちらにも当てはまらない場合
+            else:
+                status = "future"
+                start_at = item["liveStreamingDetails"]["scheduledStartTime"]
+                end_at = None
+                duration = None
 
             # インスタンスに情報を追加
             instance.set_value(
