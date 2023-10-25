@@ -78,17 +78,19 @@ class Platform:
 class Content:
     """コンテンツの基底クラス"""
 
-    id: str
-    poster_id: str
-    poster_name: str
-    poster_url: str
-    title: str
-    url: str
-    thumbnail: str
-    posted_at: str
-    updated_at: str
-    tags: list[str]
-    is_deleted: bool
+    __slots__ = [
+        "id",
+        "poster_id",
+        "poster_name",
+        "poster_url",
+        "title",
+        "url",
+        "thumbnail",
+        "posted_at",
+        "updated_at",
+        "tags",
+        "is_deleted",
+    ]
 
     def __init__(self, id: str) -> None:
         self.id: str = id
@@ -210,11 +212,14 @@ class Content:
 
 
 class Video(Content):
-    description: str
-    duration: int
-    view_count: int
-    like_count: int
-    comment_count: int
+    type = "video"
+    __slots__ = [
+        "description",
+        "duration",
+        "view_count",
+        "like_count",
+        "comment_count",
+    ]
 
     def __init__(self, id: str) -> None:
         super().__init__(id)
@@ -302,16 +307,18 @@ class Video(Content):
 
 
 class Live(Content):
-    description: str
-    duration: int
-    view_count: int
-    like_count: int
-    comment_count: int
-
-    start_at: str
-    end_at: str
-    status: str
-    archive_enabled_at: str
+    type = "live"
+    __slots__ = [
+        "description",
+        "duration",
+        "view_count",
+        "like_count",
+        "comment_count",
+        "start_at",
+        "end_at",
+        "status",
+        "archive_enabled_at",
+    ]
 
     def __init__(self, id: str) -> None:
         super().__init__(id)
@@ -419,7 +426,10 @@ class Live(Content):
 
 
 class News(Content):
-    body: str
+    type = "news"
+    __slots__ = [
+        "body",
+    ]
 
     def __init__(self, id: str) -> None:
         super().__init__(id)
