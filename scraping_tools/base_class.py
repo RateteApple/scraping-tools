@@ -117,6 +117,9 @@ class Content:
             # 長すぎるリストは省略
             elif isinstance(value, list) and len(value) > 8:
                 values[key] = value[:8] + ["etc..."]
+            # datetimeは文字列に変換
+            elif isinstance(value, datetime):
+                values[key] = value.strftime("%Y-%m-%d %H:%M:%S")
 
         return pformat(values)
 
@@ -147,13 +150,13 @@ class Content:
         # メソッドを除外
         attributes = [attribute for attribute in all_attributes if not callable(getattr(self, attribute))]
 
-        # "_"から始まる属性を除外
+        # Private属性を除外
         attributes = [attribute for attribute in attributes if not attribute.startswith("_")]
 
         # 辞書に変換
-        _dict = {attribute: getattr(self, attribute) for attribute in attributes}
+        dict_ = {attribute: getattr(self, attribute) for attribute in attributes}
 
-        return _dict
+        return dict_
 
     def diff(self, other: Content) -> dict:
         """他のインスタンスとの差分を取得する
@@ -166,7 +169,7 @@ class Content:
         # メソッドを除外
         attributes = [attribute for attribute in all_attributes if not callable(getattr(self, attribute))]
 
-        # "_"から始まる属性を除外
+        # private属性を除外
         attributes = [attribute for attribute in attributes if not attribute.startswith("_")]
 
         # 差分を取得
