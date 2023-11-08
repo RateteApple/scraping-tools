@@ -13,7 +13,7 @@ from googleapiclient.discovery import build
 import googleapiclient.discovery
 import isodate
 
-from .base_class import Platform, Live, Video
+from ..common.base_class import Platform, Live, Video
 
 
 logger = logging.getLogger(__name__)

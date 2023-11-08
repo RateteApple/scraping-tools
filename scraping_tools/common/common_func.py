@@ -2,11 +2,13 @@ import time
 from datetime import datetime, timedelta
 import re
 from functools import wraps
+
 from selenium import webdriver
-from selenium.webdriver.remote.webelement import WebElement
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import StaleElementReferenceException
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.remote.webelement import WebElement
+from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
 
 
 # 正規表現に一致する要素を1つ取得する
@@ -113,3 +115,25 @@ def parse_video_duration(duration_str: str) -> timedelta:
     video_duration = timedelta(hours=hours, minutes=minutes, seconds=seconds)
 
     return video_duration
+
+
+# ブラウザを開く
+async def open_browser(timeout: int = 5, gui: bool = False, img_load: bool = False) -> webdriver:
+    """ブラウザを開く
+
+    ブラウザを開いてWebDriverオブジェクトを返す
+    """
+    # オプションを設定
+    options = webdriver.ChromeOptions()
+    # GUIを表示しない
+    if not gui:
+        options.add_argument("--headless")
+    # 画像を読み込まない
+    if not img_load:
+        options.add_argument("--blink-settings=imagesEnabled=false")
+    # オプションを指定してWebDriverオブジェクトを作成
+    browser = webdriver.Chrome(options=options)
+    # 指定された秒数待機
+    browser.implicitly_wait(timeout)
+
+    return browser

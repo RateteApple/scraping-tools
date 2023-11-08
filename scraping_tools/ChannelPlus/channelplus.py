@@ -14,8 +14,8 @@ from selenium.webdriver.remote.webelement import WebElement
 from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import TimeoutException
 
-from .base_class import ScrapingMixin, Platform, Live, Video, News
-from .common_func import get_matching_element, get_matching_all_elements, parse_video_duration
+from ..common.base_class import ScrapingMixin, Platform, Live, Video, News
+from ..common.common_func import get_matching_element, get_matching_all_elements, parse_video_duration
 from my_utilities.debug import execute_time
 
 

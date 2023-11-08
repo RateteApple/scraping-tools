@@ -16,8 +16,8 @@ from selenium.common.exceptions import NoSuchElementException
 
 from bs4 import BeautifulSoup
 
-from .base_class import ScrapingMixin, Platform, Live, Video, News
-from .common_func import get_matching_element
+from ..common.base_class import ScrapingMixin, Platform, Live, Video, News
+from ..common.common_func import get_matching_element
 from my_utilities.debug import execute_time
 
 

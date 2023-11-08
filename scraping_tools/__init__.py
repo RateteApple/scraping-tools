@@ -1,34 +1,15 @@
-from .niconico import NicoNicoChannel
-from .niconico import NicoNicoLive
-from .niconico import NicoNicoVideo
+from .NicoNico.niconico import NicoNicoChannel
+from .NicoNico.niconico import NicoNicoLive
+from .NicoNico.niconico import NicoNicoVideo
+from .DLsite.Maniax import Work, Circle
 
-from .channelplus import ChannelPlusChannel
-from .channelplus import ChannelPlusLive
-from .channelplus import ChannelPlusVideo
-from .channelplus import ChannelPlusNews
+from .ChannelPlus.channelplus import ChannelPlusChannel
+from .ChannelPlus.channelplus import ChannelPlusLive
+from .ChannelPlus.channelplus import ChannelPlusVideo
+from .ChannelPlus.channelplus import ChannelPlusNews
 
-from .youtube import YTChannel
-from .youtube import YTLive
-from .youtube import YTVideo
+from .YouTube.youtube import YTChannel
+from .YouTube.youtube import YTLive
+from .YouTube.youtube import YTVideo
 
-from .base_class import ScrapingMixin, Platform, Content, Live, Video, News
-
-
-__all__ = [
-    "NicoNicoChannel",
-    "NicoNicoLive",
-    "NicoNicoVideo",
-    "ChannelPlusChannel",
-    "ChannelPlusLive",
-    "ChannelPlusVideo",
-    "ChannelPlusNews",
-    "YTChannel",
-    "YTLive",
-    "YTVideo",
-    "ScrapingMixin",
-    "Platform",
-    "Content",
-    "Live",
-    "Video",
-    "News",
-]
+from .common.base_class import ScrapingMixin, Platform, Content, Live, Video, News
