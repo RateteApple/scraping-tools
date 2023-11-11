@@ -66,104 +66,103 @@ class Circle:
         # ページを開く
         self.driver.get(self.url)
         logger.debug(f"open {self.url}")
-        # セクション毎の作品リストを取得(CSSselector: div#search_result_list > ul > li)
+
+        # セクション毎の作品リストを取得
         on_sale_work_elms: list[WebElement] = WebDriverWait(self.driver, self.timeout).until(
             EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div#search_result_list > ul > li"))
         )
+        # TODO
+        upcomming_work_elms: list[WebElement] = []
 
         # 作品リストを取得
-        async def get_on_sale_works(elms) -> list[dict]:
-            works = []
-            tasks = [asyncio.create_task(process_elm(elm)) for elm in elms]
-            for task in asyncio.as_completed(tasks):
-                works.append(await task)
+        on_sale_works = await asyncio.gather(*[self._on_sale_works_elm(elm) for elm in on_sale_work_elms])
+        upcomming_works = await asyncio.gather(*[self._upcomming_works_elm(elm) for elm in upcomming_work_elms])
 
-            return works
-
-        async def process_elm(elm: WebElement) -> dict:
-            try:
-                title = elm.find_element(
-                    By.CSS_SELECTOR,
-                    ".work_name a",
-                ).text
-
-                url = elm.find_element(
-                    By.CSS_SELECTOR,
-                    ".work_name a",
-                ).get_attribute("href")
-
-                id = url.split("/")[-1].split(".")[0].replace(".html", "")
-
-                discount: bool = True if elm.find_elements(By.CSS_SELECTOR, ".work_price.discount") else False
-                if discount:
-                    base_price = (
-                        elm.find_element(
-                            By.CSS_SELECTOR,
-                            ".strike",
-                        )
-                        .text.replace("円", "")
-                        .replace(",", "")
-                    )
-                    discount_price = (
-                        elm.find_element(
-                            By.CSS_SELECTOR,
-                            ".work_price.discount",
-                        )
-                        .text.replace("円", "")
-                        .replace(",", "")
-                    )
-                else:
-                    base_price = (
-                        elm.find_element(
-                            By.CSS_SELECTOR,
-                            ".work_price",
-                        )
-                        .text.replace("円", "")
-                        .replace(",", "")
-                    )
-                    discount_price = None
-
-                sale_count = elm.find_element(
-                    By.CSS_SELECTOR,
-                    ".work_dl span",
-                ).text.replace(",", "")
-
-                category = elm.find_element(
-                    By.CSS_SELECTOR,
-                    ".work_category",
-                ).text
-
-                work = {
-                    "title": title,
-                    "url": url,
-                    "id": id,
-                    "base_price": base_price,
-                    "discount_price": discount_price,
-                    "sale_count": sale_count,
-                    "category": category,
-                }
-            except NoSuchElementException as e:
-                logger.warning(e)
-            else:
-                return work
-
-        works = await get_on_sale_works(on_sale_work_elms)
-
-        # サークル情報を追加
-        for work in works:
-            work["circle"] = {
-                "id": self.id,
-                "url": self.url,
-                "name": self.driver.find_element(By.CSS_SELECTOR, "span.original_name").text,
-            }
+        # 結合
+        works = on_sale_works + upcomming_works
 
         return works
 
+    async def _on_sale_works_elm(self, elm: WebElement) -> dict:
+        """販売中の作品リストを取得"""
+
+        async def get_title(elm: WebElement) -> str:
+            try:
+                title = elm.find_element(By.CSS_SELECTOR, ".work_name a").text
+            except Exception as e:
+                logger.error(f"failed to get title")
+            else:
+                return title
+
+        async def get_url(elm: WebElement) -> str:
+            try:
+                url = elm.find_element(By.CSS_SELECTOR, ".work_name a").get_attribute("href")
+            except Exception as e:
+                logger.error(f"failed to get url")
+            else:
+                return url
+
+        async def get_price(elm: WebElement) -> dict:
+            try:
+                discount: bool = True if elm.find_elements(By.CSS_SELECTOR, ".work_price.discount") else False
+                if discount:
+                    base_price = elm.find_element(By.CSS_SELECTOR, ".strike").text.replace("円", "").replace(",", "")
+                    discount_price = elm.find_element(By.CSS_SELECTOR, ".work_price.discount").text.replace("円", "").replace(",", "")
+                else:
+                    base_price = elm.find_element(By.CSS_SELECTOR, ".work_price").text.replace("円", "").replace(",", "")
+                    discount_price = None
+            except Exception as e:
+                logger.error(f"failed to get price")
+            else:
+                return {"base": base_price, "discount": discount_price}
+
+        async def get_sale_count(elm: WebElement) -> int:
+            try:
+                sale_count = elm.find_element(By.CSS_SELECTOR, ".work_dl span").text.replace(",", "")
+            except Exception as e:
+                logger.error(f"failed to get sale_count")
+            else:
+                return sale_count
+
+        async def get_category(elm: WebElement) -> str:
+            try:
+                category = elm.find_element(By.CSS_SELECTOR, ".work_category").text
+            except Exception as e:
+                logger.error(f"failed to get category")
+            else:
+                return category
+
+        # 作品情報を取得
+        tasks = [
+            get_title(elm),
+            get_url(elm),
+            get_price(elm),
+            get_sale_count(elm),
+            get_category(elm),
+        ]
+        title, url, price, sale_count, category = await asyncio.gather(*tasks)
+        work = {
+            "title": title,
+            "url": url,
+            "price": price,
+            "sale_count": sale_count,
+            "category": category,
+            "circle": {
+                "id": self.id,
+                "url": self.url,
+                "name": self.driver.find_element(By.CSS_SELECTOR, "span.original_name").text,
+            },
+        }
+        return work
+
+    async def _upcomming_works_elm(self) -> list:
+        # TODO
+        return []
+
 
 async def main():
-    circle = Circle("RG46817")
-    await circle.open_browser(debug=True)
-    works = await circle.get_works_by_selenium()
+    circle = Circle("RG42511")
+    works = await circle.get_work()
     pprint(works)
 
 

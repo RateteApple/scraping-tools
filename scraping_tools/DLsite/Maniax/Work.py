@@ -436,11 +436,7 @@ class Work:
                 logger.error(f"can't get work price.")
                 return ""
             else:
-                price = {
-                    "base": base_price,
-                    "discount": discount_price,
-                }
-                return price
+                return {"base": base_price, "discount": discount_price}
 
         async def get_work_circle_info() -> dict:
             try:
