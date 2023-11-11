@@ -30,9 +30,9 @@ class Circle:
             self.open_browser()
             return self.driver
 
-    async def open_browser(
+    def open_browser(
         self,
-        debug: bool = False,
+        driver: webdriver.Chrome = None,
         img_load: bool = False,
         gui: bool = False,
         timeout: int = 5,
@@ -51,11 +51,8 @@ class Circle:
             options.add_argument("--headless")  # GUIを無効化
 
         # ブラウザを開く
-        start = time.time()
-        self.driver = webdriver.Chrome(options)
-        end = time.time()
-        if debug:
-            logger.debug(f"launch browser: {end - start} sec")
+        if not driver:
+            self.driver = webdriver.Chrome(options)
         # 待機時間を設定
         self.timeout = timeout
 
