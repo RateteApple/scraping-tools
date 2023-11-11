@@ -1,7 +1,8 @@
 from .NicoNico.niconico import NicoNicoChannel
 from .NicoNico.niconico import NicoNicoLive
 from .NicoNico.niconico import NicoNicoVideo
-from .DLsite.Maniax import Work, Circle
+from .DLsite.Maniax.Circle import ManiaxCircle
+from .DLsite.Maniax.Work import ManiaxWork
 
 from .ChannelPlus.channelplus import ChannelPlusChannel
 from .ChannelPlus.channelplus import ChannelPlusLive
