@@ -93,29 +93,6 @@ class Work:
         return status
 
     @staticmethod
-    async def gen_keyword(
-        and_: list = None,
-        or_: list = None,
-        not_: list = None,
-        exact: list = None,
-    ) -> str:
-        """検索キーワードを生成する"""
-        keyword = ""
-        # and検索は単語をスペースで区切る
-        if and_:
-            keyword += " ".join(and_)
-        # or検索は"パイプ(|)"で区切る
-        if or_:
-            keyword += "|" + "|".join(or_)
-        # not検索は単語の前に"-"をつける
-        if not_:
-            keyword += " -" + " -".join(not_)
-        # 完全一致検索は単語をダブルクォーテーションで囲む(AND検索でしか使えない)
-        if exact:
-            keyword += ' "' + '" "'.join(exact) + '"'
-        return keyword
-
-    @staticmethod
     async def gen_work_type(
         cg_illust: bool = False,
         video: bool = False,
@@ -213,7 +190,7 @@ class Work:
             >>> url = await Work.gen_url(
                     status=await Work.gen_status(all=True),
                     work_type=await Work.gen_work_type(),
-                    keyword=await Work.gen_keyword(),
+                    keyword="and1 and2 or1|or2 -not1 -not2",
                     keyword_creater="天知遥",
                     order=await Work.gen_order(new=True),
                     per_page=50,
