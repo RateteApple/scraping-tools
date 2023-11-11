@@ -93,7 +93,7 @@ class Work:
         return status
 
     @staticmethod
-    async def gen_search_keyword(
+    async def gen_keyword(
         and_: list = None,
         or_: list = None,
         not_: list = None,
@@ -213,7 +213,7 @@ class Work:
             >>> url = await Work.gen_url(
                     status=await Work.gen_status(all=True),
                     work_type=await Work.gen_work_type(),
-                    keyword=await Work.gen_search_keyword(),
+                    keyword=await Work.gen_keyword(),
                     keyword_creater="天知遥",
                     order=await Work.gen_order(new=True),
                     per_page=50,
@@ -494,7 +494,7 @@ async def main():
     # url = await Work.gen_url(
     #     status=await Work.gen_status(on_sale=True),
     #     work_type=await Work.gen_work_type(),
-    #     keyword=await Work.gen_search_keyword(),
+    #     keyword=await Work.gen_keyword(),
     #     keyword_creater="天知遥",
     #     order=await Work.gen_order(new=True),
     #     per_page=50,
