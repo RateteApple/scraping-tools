@@ -21,11 +21,16 @@ logger = logging.getLogger(__name__)
 THUMBNAIL_SIZES = ("maxres", "standard", "high", "medium", "default")
 
 
-class YTChannel(Platform):
+class YTChannel:
     """YouTubeAPIのヘルパークラス"""
 
     # APIクライアントを作成
     client: googleapiclient.discovery.Resource = build("youtube", "v3", developerKey=os.environ["YOUTUBE_API_KEY"])
+
+    def __init__(self, id: str) -> None:
+        if "@" in id:
+            id = self.search_channel_id(id)
+        self.id = id
 
     def get_from_api(self, limit: int = 5, order: str = "date") -> list[dict]:
         """チャンネルのコンテンツを取得するメソッド
