@@ -28,6 +28,7 @@ class Circle:
         # ドライバを起動
         if name == "driver":
             self.open_browser()
+            return self.driver
 
     async def open_browser(
         self,

@@ -33,6 +33,7 @@ class Work:
         # ドライバを起動
         if name == "driver":
             self.open_browser()
+            return self.driver
 
     def open_browser(
         self,
