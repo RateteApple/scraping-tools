@@ -32,7 +32,7 @@ class YTChannel:
             id = self.search_channel_id(id)
         self.id = id
 
-    def get_from_api(self, limit: int = 5, order: str = "date") -> list[dict]:
+    def get_from_api(self, limit: int = 5, order: str = "date") -> list[str]:
         """チャンネルのコンテンツを取得するメソッド
 
         Args:
@@ -46,13 +46,10 @@ class YTChannel:
         res = self.client.search().list(channelId=self.id, part="snippet", maxResults=limit, type="video", order=order, safeSearch="none").execute()
         logger.info(f"Success to get Channel API response")
 
-        # IDとetagを取得
-        contents = []
-        for item in res["items"]:
-            content = {"id": item["id"]["videoId"], "etag": item["etag"]}
-            contents.append(content)
+        # IDを取得
+        ids = [item["id"]["videoId"] for item in res["items"]]
 
-        return contents
+        return ids
 
     def get_ids_from_feed(self) -> list[str]:
         """チャンネルのコンテンツを取得するメソッド

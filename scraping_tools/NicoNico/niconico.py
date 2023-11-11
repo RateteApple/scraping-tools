@@ -29,15 +29,14 @@ VIDEO_ID_PATTERN = "^so\d+$"
 NEWS_ID_PATTERN = "^ar\d+$"
 
 
-class NicoNicoChannel(Platform, ScrapingMixin):
+class NicoNicoChannel(ScrapingMixin):
     """ニコニコチャンネルのコンテンツを取得するクラス"""
 
     def __init__(self, id: str) -> None:
-        """チャンネルIDを指定する
-
-        名前でもおそらく動くが動作は保証できない"""
-        check_channel_id(id)
-        super().__init__(id)
+        """チャンネルIDを指定する"""
+        if not re.match(CHANNEL_ID_PATTERN, id):
+            id = self.search_channel_id(id)
+        self.id = id
 
     # トップページの生放送を取得する
     def get_live(self, limit: int = 10) -> list[NicoNicoLive]:
