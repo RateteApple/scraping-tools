@@ -24,14 +24,10 @@ class Circle:
         self.id = id
         self.url = f"https://www.dlsite.com/maniax/circle/profile/=/maker_id/{id}.html"
 
-    def require_driver(func):
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            if not hasattr(self, "driver"):
-                raise AttributeError("require driver. please call open_driver() before this method.")
-            return func(self, *args, **kwargs)
-
-        return wrapper
+    def __getattr__(self, name: str):
+        # ドライバを起動
+        if name == "driver":
+            self.open_browser()
 
     async def open_browser(
         self,
@@ -48,13 +44,10 @@ class Circle:
         options.add_argument("--window-size=1920,1080")  # Windowサイズを1920x1080に設定
         options.add_experimental_option("excludeSwitches", ["enable-logging"])  # ログを無効化
         options.add_argument("--disable-extensions")  # 拡張機能を無効化
-        if debug:
-            pass
-        else:
-            if not img_load:
-                options.add_argument("--blink-settings=imagesEnabled=false")  # 画像読み込みを無効化
-            if not gui:
-                options.add_argument("--headless")  # GUIを無効化
+        if not img_load:
+            options.add_argument("--blink-settings=imagesEnabled=false")  # 画像読み込みを無効化
+        if not gui:
+            options.add_argument("--headless")  # GUIを無効化
 
         # ブラウザを開く
         start = time.time()
@@ -71,8 +64,7 @@ class Circle:
 
         return self.driver
 
-    @require_driver
-    async def get_works_by_selenium(self) -> list:
+    async def get_work(self) -> list:
         # ページを開く
         self.driver.get(self.url)
         logger.debug(f"open {self.url}")

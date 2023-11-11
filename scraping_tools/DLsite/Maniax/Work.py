@@ -1,3 +1,4 @@
+from typing import Any
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -28,19 +29,14 @@ class Work:
         "music": "音楽",
     }
 
-    def _require_driver(func):
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            if not hasattr(self, "driver"):
-                raise AttributeError("require driver. please call open_driver() before this method.")
-            return func(self, *args, **kwargs)
+    def __getattr__(self, name: str) -> Any:
+        # ドライバを起動
+        if name == "driver":
+            self.open_browser()
 
-        return wrapper
-
-    async def open_browser(
+    def open_browser(
         self,
         driver: webdriver.Chrome = None,
-        debug: bool = False,
         img_load: bool = False,
         gui: bool = False,
         timeout: int = 5,
@@ -53,13 +49,10 @@ class Work:
         options.add_argument("--window-size=1920,1080")  # Windowサイズを1920x1080に設定
         options.add_experimental_option("excludeSwitches", ["enable-logging"])  # ログを無効化
         options.add_argument("--disable-extensions")  # 拡張機能を無効化
-        if debug:
-            pass
-        else:
-            if not img_load:
-                options.add_argument("--blink-settings=imagesEnabled=false")  # 画像読み込みを無効化
-            if not gui:
-                options.add_argument("--headless")  # GUIを無効化
+        if not img_load:
+            options.add_argument("--blink-settings=imagesEnabled=false")  # 画像読み込みを無効化
+        if not gui:
+            options.add_argument("--headless")  # GUIを無効化
 
         # ブラウザを開く
         if not driver:
@@ -73,6 +66,7 @@ class Work:
 
         return self.driver
 
+    # ここからURL作成用のメソッド - - - - - - - - - - - - - - - - -
     @staticmethod
     async def gen_status(
         all: bool = False,
@@ -364,9 +358,7 @@ class Work:
 
         return decoded_url
 
-    # ここから検索結果を取得するメソッド
-
-    @_require_driver
+    # ここから検索結果を取得するメソッド - - - - - - - - - - - - -
     async def search(self, url: str) -> list:
         """検索結果を取得する"""
         # ブラウザを開く
@@ -382,7 +374,7 @@ class Work:
         return works
 
     async def _get_work_info(self, work_elm: WebElement) -> dict:
-        async def get_is_on_sale() -> bool:
+        async def get_status() -> str:
             try:
                 expected_date: list = work_elm.find_elements(By.CSS_SELECTOR, ".expected_date")
             except Exception as e:
@@ -390,9 +382,9 @@ class Work:
                 return ""
             else:
                 if expected_date:
-                    return False
+                    return "upcoming"
                 else:
-                    return True
+                    return "on_sale"
 
         async def get_work_title() -> str:
             try:
@@ -465,23 +457,28 @@ class Work:
                 }
                 return circle_info
 
-        # 作品の詳細情報を取得するタスクを作成
-        tasks = [
-            get_work_title(),
-            get_work_url(),
-            get_work_thumbnail(),
-            get_work_type(),
-            get_work_circle_info(),
-        ]
-
         # 販売中の作品のみ価格を取得
-        is_on_sale = await get_is_on_sale()
-        if is_on_sale:
-            tasks.append(get_work_price())
+        status = await get_status()
+        if status == "on_sale":
+            title, url, thumbnail, work_type, price, circle_info = await asyncio.gather(
+                get_work_title(),
+                get_work_url(),
+                get_work_thumbnail(),
+                get_work_type(),
+                get_work_price(),
+                get_work_circle_info(),
+            )
         else:
-            pass
+            title, url, thumbnail, work_type, circle_info = await asyncio.gather(
+                get_work_title(),
+                get_work_url(),
+                get_work_thumbnail(),
+                get_work_type(),
+                get_work_circle_info(),
+            )
+            price = None
 
-        title, url, thumbnail, work_type, price, circle_info = await asyncio.gather(*tasks)
+        # 作品IDを取得
         id = url.split("/")[-1].split(".")[0].replace(".html", "")
 
         return {
@@ -492,6 +489,7 @@ class Work:
             "type": work_type,
             "price": price,
             "circle": circle_info,
+            "status": status,
         }
 
 
