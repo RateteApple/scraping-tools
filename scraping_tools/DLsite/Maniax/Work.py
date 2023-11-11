@@ -28,7 +28,7 @@ class Work:
         "music": "音楽",
     }
 
-    def require_driver(func):
+    def _require_driver(func):
         @wraps(func)
         def wrapper(self, *args, **kwargs):
             if not hasattr(self, "driver"):
@@ -235,18 +235,15 @@ class Work:
             nonlocal status
 
             if not status:
-                pass
-            elif status == "all":  # 全て
-                para = "ana_flg/all/"
+                return "ana_flg/all/"
             elif status == "on_sale":  # 販売中
-                para = "ana_flg/on_sale/"
+                return "ana_flg/on_sale/"
             elif status == "preorder":  # 予約中
-                para = "is_reserve/1/"
+                return "is_reserve/1/"
             elif status == "upcoming":  # 予告中
-                para = "ana_flg/on/"
+                return "ana_flg/on/"
             else:
                 raise ValueError("invalid status. valid status is all, on_sale, preorder or upcoming.")
-            return para
 
         # 作品形式
         async def add_work_type() -> str:
@@ -357,7 +354,9 @@ class Work:
         ]
         # パラメータを追加
         for task in await asyncio.gather(*tasks):
-            url += task
+            # パラメータが空文字列でなければ追加
+            if task:
+                url += task
         logger.debug(f"generated url: {url}")
 
         # URLをエンコード
@@ -365,6 +364,9 @@ class Work:
 
         return decoded_url
 
+    # ここから検索結果を取得するメソッド
+
+    @_require_driver
     async def search(self, url: str) -> list:
         """検索結果を取得する"""
         # ブラウザを開く
@@ -373,116 +375,124 @@ class Work:
         # 作品リストを取得
         work_elms = WebDriverWait(self.driver, self.timeout).until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "ul.n_worklist > *")))
 
-        async def get_work_info(work_elm: WebElement) -> dict:
-            async def get_work_title() -> str:
-                try:
-                    title = WebDriverWait(work_elm, self.timeout).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".work_name a"))).text
-                except Exception as e:
-                    logger.error(f"can't get work title.\n{e}")
-                    return ""
-                else:
-                    return title
-
-            async def get_work_url() -> str:
-                try:
-                    url = WebDriverWait(work_elm, self.timeout).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".work_name a"))).get_attribute("href")
-                except Exception as e:
-                    logger.error(f"can't get work url.\n{e}")
-                    return ""
-                else:
-                    return url
-
-            async def get_work_thumbnail() -> str:
-                try:
-                    thumbnail = WebDriverWait(work_elm, self.timeout).until(EC.presence_of_element_located((By.CSS_SELECTOR, "img.lazy"))).get_attribute("src")
-                except Exception as e:
-                    logger.error(f"can't get work thumbnail.\n{e}")
-                    return ""
-                else:
-                    return thumbnail
-
-            async def get_work_type() -> str:
-                try:
-                    work_type = WebDriverWait(work_elm, self.timeout).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".work_category"))).text
-                except Exception as e:
-                    logger.error(f"can't get work type.\n{e}")
-                    return ""
-                else:
-                    return work_type
-
-            async def get_work_price() -> dict:
-                try:
-                    discount = True if work_elm.find_elements(By.CSS_SELECTOR, ".work_price.discount") else False
-                    base_price: str = (
-                        WebDriverWait(work_elm, self.timeout).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".strike"))).text
-                        if discount
-                        else WebDriverWait(work_elm, self.timeout).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".work_price"))).text
-                    )
-                    base_price: int = int(base_price.replace("円", "").replace(",", ""))
-                    discount_price: str = (
-                        WebDriverWait(work_elm, self.timeout).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".work_price.discount"))).text if discount else None
-                    )
-                    discount_price: int = int(discount_price.replace("円", "").replace(",", "")) if discount_price else None
-                except Exception as e:
-                    logger.error(f"can't get work price.\n{e}")
-                    return ""
-                else:
-                    price = {
-                        "base": base_price,
-                        "discount": discount_price,
-                    }
-                    return price
-
-            async def get_work_circle_info() -> dict:
-                try:
-                    circle_name = WebDriverWait(work_elm, self.timeout).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".maker_name a"))).text
-                    circle_url = WebDriverWait(work_elm, self.timeout).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".maker_name a"))).get_attribute("href")
-                    circle_id = circle_url.split("/")[-1].split(".")[0].replace(".html", "")
-                except Exception as e:
-                    logger.error(f"can't get work circle info.\n{e}")
-                    return ""
-                else:
-                    circle_info = {
-                        "name": circle_name,
-                        "url": circle_url,
-                        "id": circle_id,
-                    }
-                    return circle_info
-
-            # 作品の詳細情報を並行で取得
-            tasks = [
-                get_work_title(),
-                get_work_url(),
-                get_work_thumbnail(),
-                get_work_type(),
-                get_work_price(),
-                get_work_circle_info(),
-            ]
-            title, url, thumbnail, work_type, price, circle_info = await asyncio.gather(*tasks)
-            id = url.split("/")[-1].split(".")[0].replace(".html", "")
-
-            return {
-                "id": id,
-                "title": title,
-                "url": url,
-                "thumbnail": thumbnail,
-                "type": work_type,
-                "price": price,
-                "circle": circle_info,
-            }
-
         # 各作品に対して並行で情報を取得する
-        tasks = [asyncio.create_task(get_work_info(work_elm)) for work_elm in work_elms]
+        tasks = [asyncio.create_task(self._get_work_info(work_elm)) for work_elm in work_elms]
         works = await asyncio.gather(*tasks)
         logger.debug(f"{pformat(works)}")
         return works
 
-    async def get_detail(self, id: str) -> dict:
-        """作品の詳細情報を取得する"""
-        # ブラウザを開く
-        self.driver.get(f"https://www.dlsite.com/maniax/work/=/product_id/{id}.html")
+    async def _get_work_info(self, work_elm: WebElement) -> dict:
+        async def get_is_on_sale() -> bool:
+            try:
+                expected_date: list = work_elm.find_elements(By.CSS_SELECTOR, ".expected_date")
+            except Exception as e:
+                logger.error(f"can't get is_on_sale.")
+                return ""
+            else:
+                if expected_date:
+                    return False
+                else:
+                    return True
 
-        # TODO
+        async def get_work_title() -> str:
+            try:
+                title = work_elm.find_element(By.CSS_SELECTOR, ".work_name a").text
+            except Exception as e:
+                logger.error(f"can't get work title.")
+                return ""
+            else:
+                return title
+
+        async def get_work_url() -> str:
+            try:
+                url = work_elm.find_element(By.CSS_SELECTOR, ".work_name a").get_attribute("href")
+            except Exception as e:
+                logger.error(f"can't get work url.")
+                return ""
+            else:
+                return url
+
+        async def get_work_thumbnail() -> str:
+            try:
+                thumbnail = work_elm.find_element(By.CSS_SELECTOR, "img.lazy").get_attribute("src")
+            except Exception as e:
+                logger.error(f"can't get work thumbnail.")
+                return ""
+            else:
+                return thumbnail
+
+        async def get_work_type() -> str:
+            try:
+                work_type = work_elm.find_element(By.CSS_SELECTOR, ".work_category").text
+            except Exception as e:
+                logger.error(f"can't get work type.")
+                return ""
+            else:
+                return work_type
+
+        async def get_work_price() -> dict:
+            try:
+                discount = True if work_elm.find_elements(By.CSS_SELECTOR, ".work_price.discount") else False
+                # 元の価格
+                base_price: str = work_elm.find_element(By.CSS_SELECTOR, ".strike").text if discount else work_elm.find_element(By.CSS_SELECTOR, ".work_price").text
+                base_price: int = int(base_price.replace("円", "").replace(",", ""))
+                # 割引後の価格
+                discount_price: str = work_elm.find_element(By.CSS_SELECTOR, ".work_price.discount").text if discount else None
+                discount_price: int = int(discount_price.replace("円", "").replace(",", "")) if discount_price else None
+            except Exception as e:
+                logger.error(f"can't get work price.")
+                return ""
+            else:
+                price = {
+                    "base": base_price,
+                    "discount": discount_price,
+                }
+                return price
+
+        async def get_work_circle_info() -> dict:
+            try:
+                circle_name = work_elm.find_element(By.CSS_SELECTOR, ".maker_name a").text
+                circle_url = work_elm.find_element(By.CSS_SELECTOR, ".maker_name a").get_attribute("href")
+                circle_id = circle_url.split("/")[-1].split(".")[0].replace(".html", "")
+            except Exception as e:
+                logger.error(f"can't get work circle info.")
+                return ""
+            else:
+                circle_info = {
+                    "name": circle_name,
+                    "url": circle_url,
+                    "id": circle_id,
+                }
+                return circle_info
+
+        # 作品の詳細情報を取得するタスクを作成
+        tasks = [
+            get_work_title(),
+            get_work_url(),
+            get_work_thumbnail(),
+            get_work_type(),
+            get_work_circle_info(),
+        ]
+
+        # 販売中の作品のみ価格を取得
+        is_on_sale = await get_is_on_sale()
+        if is_on_sale:
+            tasks.append(get_work_price())
+        else:
+            pass
+
+        title, url, thumbnail, work_type, price, circle_info = await asyncio.gather(*tasks)
+        id = url.split("/")[-1].split(".")[0].replace(".html", "")
+
+        return {
+            "id": id,
+            "title": title,
+            "url": url,
+            "thumbnail": thumbnail,
+            "type": work_type,
+            "price": price,
+            "circle": circle_info,
+        }
 
 
 async def main():
